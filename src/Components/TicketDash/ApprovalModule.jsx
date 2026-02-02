@@ -166,20 +166,6 @@ const ApprovalModule = ({
     return (
         <div className="approval-container">
             <div className="approval-card">
-                <div className="approval-header">
-                    <div>
-                        <h3>Ticket Approval</h3>
-                        {ticketTitle && (
-                            <p className="ticket-ref">
-                                Reference: {ticketTitle}
-                            </p>
-                        )}
-                    </div>
-                    <div
-                        className={`status-badge ${formData.approval_status === "Approved" ? "approved" : "rejected"}`}>
-                        {formData.approval_status}
-                    </div>
-                </div>
 
                 {message.text && (
                     <div className={`alert ${message.type}`}>

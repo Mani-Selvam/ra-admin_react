@@ -108,17 +108,14 @@
 
 /* Form Container */
 .wa-form-container {
-    padding: 30px 50px;
-    background: rgba(255, 255, 255, 0.9);
+    padding: 2px 2px;
     backdrop-filter: blur(10px);
 }
 
 .wa-form-card {
     background: white;
     border-radius: 20px;
-    padding: 40px;
-    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.1);
-    border: 1px solid rgba(255, 255, 255, 0.2);
+    padding: 5px;
 }
 
 .wa-form-header {
@@ -181,8 +178,8 @@
 .wa-ticket-details {
     background: linear-gradient(135deg, #f7fafc 0%, #edf2f7 100%);
     border-radius: 15px;
-    padding: 25px;
-    margin: 25px 0;
+    padding: 5px;
+    margin: 5px 0;
     border: 1px solid #e2e8f0;
 }
 
@@ -582,7 +579,6 @@
     max-width: 700px;
     width: 90%;
     max-height: 90vh;
-    overflow-y: auto;
     box-shadow: 0 25px 50px rgba(0, 0, 0, 0.25);
     animation: modalSlideIn 0.3s ease-out;
 }
@@ -1197,12 +1193,12 @@
 @media (max-height: 500px) and (orientation: landscape) {
     .wa-modal-content {
         max-height: 90vh;
-        overflow-y: auto;
+       
     }
 
     .wa-modal-body {
         max-height: 60vh;
-        overflow-y: auto;
+       
     }
 
     .wa-upload-label {

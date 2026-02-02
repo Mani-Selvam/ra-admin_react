@@ -1034,27 +1034,7 @@ const TicketList = () => {
                         style={styles.primaryBtn}>
                         + Create Ticket
                     </button>
-                    <button
-                        onClick={() => {
-                            const next = !showAssignedOnly;
-                            setShowAssignedOnly(next);
-                            localStorage.setItem(
-                                "assignedOnly",
-                                next ? "true" : "false",
-                            );
-                            fetchTickets();
-                        }}
-                        style={{
-                            padding: "10px 14px",
-                            borderRadius: 8,
-                            border: "1px solid #e5e7eb",
-                            background: showAssignedOnly ? "#eff6ff" : "white",
-                            color: showAssignedOnly ? "#1e40af" : "#374151",
-                            cursor: "pointer",
-                            fontWeight: 600,
-                        }}>
-                        {showAssignedOnly ? "Show All" : "My Assigned"}
-                    </button>
+                   
                 </div>
             </div>
 
@@ -2163,18 +2143,18 @@ const styles = {
         alignItems: "center",
     },
     largeModal: {
+        padding:"20px",
         background: "white",
-        width: "800px",
-        maxWidth: "90%",
+        width: "700px",
+        maxWidth: "80%",
         borderRadius: "12px",
         boxShadow:
-            "0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)",
+            "0 20px 25px -5px rgba(255, 15, 15, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)",
         display: "flex",
         flexDirection: "column",
         maxHeight: "90vh",
     },
     modalHeader: {
-        padding: "20px",
         borderBottom: "1px solid #e5e7eb",
         display: "flex",
         justifyContent: "space-between",

@@ -817,7 +817,7 @@ const styles = {
         fontWeight: "600",
         whiteSpace: "nowrap",
     },
-    thAction: { textAlign: "right" },
+    thAction: { textAlign: "right", padding:"12px" },
     tr: { borderBottom: "1px solid #f3f4f6" },
     td: {
         padding: "12px 16px",
@@ -826,7 +826,7 @@ const styles = {
         verticalAlign: "middle",
         whiteSpace: "nowrap",
     },
-    tdAction: { textAlign: "right", whiteSpace: "nowrap" },
+    tdAction: { textAlign: "right", whiteSpace: "nowrap" , padding:"12px"}, 
     actionBtn: {
         background: "#e0e7ff",
         color: "#3730a3",
@@ -839,6 +839,7 @@ const styles = {
         alignItems: "center",
         cursor: "pointer",
         marginRight: "4px",
+        margin:"5px",
     },
     actionBtnDelete: {
         background: "#fee2e2",

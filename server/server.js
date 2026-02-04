@@ -12,11 +12,13 @@ import userRoutes from "./routes/userRoutes.js";
 import ticketRoutes from "./routes/tickets.js";
 import approvalRoutes from "./routes/approvalRoutes.js";
 import workAnalysisRoutes from "./routes/workAnalysisRoutes.js";
+import workLogRoutes from "./routes/workLogRoutes.js";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 import connectDB from "./db.js";
 import companyRoutes from "./routes/companyRoutes.js";
+import TicketStatus from "./models/TicketStatus.js";
 
 dotenv.config();
 connectDB();
@@ -27,6 +29,34 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
+
+// Initialize ticket statuses on server startup
+const initializeTicketStatuses = async () => {
+    try {
+        const requiredStatuses = [
+            { name: "Material Request", sortOrder: 99 },
+            { name: "Material Approved", sortOrder: 100 },
+            { name: "Working In Progress", sortOrder: 101 }
+        ];
+
+        for (const status of requiredStatuses) {
+            const existing = await TicketStatus.findOne({ name: status.name });
+            if (!existing) {
+                await TicketStatus.create({
+                    name: status.name,
+                    sortOrder: status.sortOrder,
+                    status: "Active"
+                });
+                console.log(`✅ Created TicketStatus: ${status.name}`);
+            }
+        }
+    } catch (error) {
+        console.error("❌ Error initializing ticket statuses:", error.message);
+    }
+};
+
+// Call initialization after connecting to DB
+setTimeout(initializeTicketStatuses, 1000);
 
 // Routes
 app.use("/api/companies", companyRoutes);
@@ -39,5 +69,6 @@ app.use("/api/auth", authRoutes);
 app.use("/api/tickets", ticketRoutes);
 app.use("/api/approvals", approvalRoutes);
 app.use("/api/work-analysis", workAnalysisRoutes);
+app.use("/api/work-logs", workLogRoutes);
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));

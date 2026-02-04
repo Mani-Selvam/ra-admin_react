@@ -589,7 +589,7 @@ const styles = {
         display: "grid",
         gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))",
         width: "100%",
-        gap: "20px",
+        gap: "10px",
         marginBottom: "20px",
     },
     inputGroup: { display: "flex", flexDirection: "column" },
@@ -600,6 +600,7 @@ const styles = {
         marginBottom: "8px",
     },
     input: {
+        
         padding: "14px 16px",
         border: "1px solid #d1d5db",
         borderRadius: "10px",
@@ -611,7 +612,7 @@ const styles = {
     submitButton: {
         marginTop: "25px",
         padding: "12px",
-        width: "30%",
+        width: "20%",
         background: "#2563eb",
         color: "#fff",
         border: "none",

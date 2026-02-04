@@ -630,7 +630,7 @@ const styles = {
     submitButton: {
         marginTop: "25px",
         padding: "12px",
-        width: "30%",
+        width: "20%",
         background: "#2563eb",
         color: "#fff",
         border: "none",

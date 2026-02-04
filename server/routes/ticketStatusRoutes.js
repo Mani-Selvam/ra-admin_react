@@ -13,6 +13,45 @@ router.get("/", async (req, res) => {
     }
 });
 
+// INITIALIZE MATERIAL STATUSES (create if not exist) - MUST BE BEFORE /:id ROUTES
+router.post("/init/material-statuses", async (req, res) => {
+    try {
+        console.log("🔵 Initializing Material Statuses endpoint called");
+        const statuses = [
+            { name: "Material Request", sortOrder: 99 },
+            { name: "Material Approved", sortOrder: 100 },
+            { name: "Working In Progress", sortOrder: 101 }
+        ];
+
+        const created = [];
+        
+        for (const status of statuses) {
+            const existing = await TicketStatus.findOne({ name: status.name });
+            
+            if (!existing) {
+                const newStatus = await TicketStatus.create({
+                    name: status.name,
+                    sortOrder: status.sortOrder,
+                    status: "Active"
+                });
+                created.push(newStatus);
+                console.log(`✅ Created TicketStatus: ${newStatus.name}`);
+            } else {
+                console.log(`✓ TicketStatus already exists: ${status.name}`);
+            }
+        }
+        
+        res.json({
+            message: "Material statuses initialized successfully",
+            created: created,
+            total: statuses.length
+        });
+    } catch (error) {
+        console.error("❌ Error in init endpoint:", error);
+        res.status(500).json({ message: error.message });
+    }
+});
+
 // CREATE
 router.post("/", async (req, res) => {
     try {

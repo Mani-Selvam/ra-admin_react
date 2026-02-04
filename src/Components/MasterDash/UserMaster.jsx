@@ -199,6 +199,19 @@ const UserMaster = () => {
         setLoading(true);
 
         try {
+            // Client-side validation
+            if (!form.name || !form.email || !form.mobile) {
+                alert("Name, email and mobile are required");
+                setLoading(false);
+                return;
+            }
+            if (!isEdit) {
+                if (!form.password || form.password.length < 6) {
+                    alert("Password must be at least 6 characters");
+                    setLoading(false);
+                    return;
+                }
+            }
             if (isEdit) {
                 const updateData = { ...form };
                 if (!updateData.password) {
@@ -220,7 +233,9 @@ const UserMaster = () => {
             setShowForm(false);
         } catch (error) {
             console.error(error);
-            alert("Failed to save user.");
+            const serverMsg =
+                error?.response?.data?.message || error?.message || "Failed to save user.";
+            alert(serverMsg);
         } finally {
             setLoading(false);
         }
@@ -902,7 +917,7 @@ const styles = {
     submitButton: {
         marginTop: "25px",
         padding: "12px",
-        width: "100%",
+        width: "20%",
         background: "#2563eb",
         color: "#fff",
         border: "none",

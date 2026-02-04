@@ -2,6 +2,8 @@ import express from "express";
 import multer from "multer";
 import path from "path";
 import Ticket from "../models/Ticket.js";
+import TicketStatus from "../models/TicketStatus.js";
+import { auth } from "../middleware/auth.js";
 
 const router = express.Router();
 
@@ -23,6 +25,84 @@ const storage = multer.diskStorage({
 });
 
 const upload = multer({ storage });
+
+// GET TICKETS ASSIGNED TO WORKER ONLY - Protected Route (MUST BE BEFORE /:id ROUTE)
+router.get("/worker/assigned", auth, async (req, res) => {
+    try {
+        const workerId = (req.user.user && req.user.user.id) || req.user.id; // Get worker ID from JWT token
+        console.log("🔍 [WORKER TICKETS] Worker ID from token:", workerId);
+        console.log("🔍 [WORKER TICKETS] Worker ID type:", typeof workerId);
+
+        // Find all tickets where this worker is in the assigned_to array
+        const tickets = await Ticket.find({
+            assigned_to: { $elemMatch: { $eq: workerId } },
+        })
+            .populate("raised_by", "name email mobile")
+            .populate("department_id", "name")
+            .populate("company_id", "name")
+            .populate("priority_id", "name")
+            .populate("status_id", "name")
+            .populate("assigned_to", "name email")
+            .populate("approver_id", "name email")
+            .sort({ createdAt: -1 });
+
+        console.log(`✅ [WORKER TICKETS] Found ${tickets.length} tickets for worker ${workerId}`);
+        
+        // Debug: show all tickets with their assigned workers
+        const allTickets = await Ticket.find({})
+            .select("ticket_id title assigned_to")
+            .populate("assigned_to", "_id name");
+        
+        console.log("🔍 [WORKER TICKETS] All tickets in DB:");
+        allTickets.forEach(t => {
+            const assignedIds = t.assigned_to?.map(a => a._id?.toString()) || [];
+            const isAssignedToWorker = assignedIds.includes(workerId);
+            console.log(`  - ${t.ticket_id}: assigned=${assignedIds}, match=${isAssignedToWorker}`);
+        });
+        
+        res.json(tickets);
+    } catch (error) {
+        console.error("❌ [WORKER TICKETS] Error fetching worker tickets:", error);
+        res.status(500).json({ message: error.message });
+    }
+});
+
+// GET SINGLE TICKET FOR WORKER - Protected Route (MUST BE BEFORE /:id ROUTE)
+router.get("/worker/:ticketId", auth, async (req, res) => {
+    try {
+        const workerId = (req.user.user && req.user.user.id) || req.user.id;
+        const { ticketId } = req.params;
+
+        const ticket = await Ticket.findById(ticketId)
+            .populate("raised_by", "name email mobile")
+            .populate("department_id", "name")
+            .populate("company_id", "name")
+            .populate("priority_id", "name")
+            .populate("status_id", "name")
+            .populate("assigned_to", "name email")
+            .populate("approver_id", "name email");
+
+        if (!ticket) {
+            return res.status(404).json({ message: "Ticket not found" });
+        }
+
+        // Check if worker is assigned to this ticket
+        const isAssigned = ticket.assigned_to.some(
+            (assignee) => String(assignee._id) === String(workerId)
+        );
+
+        if (!isAssigned) {
+            return res
+                .status(403)
+                .json({ message: "You are not assigned to this ticket" });
+        }
+
+        res.json(ticket);
+    } catch (error) {
+        console.error("Error fetching worker ticket detail:", error);
+        res.status(500).json({ message: error.message });
+    }
+});
 
 // GET ALL TICKETS - with optional filtering
 router.get("/", async (req, res) => {
@@ -153,6 +233,8 @@ router.post("/", upload.single("image"), async (req, res) => {
             raised_by,
         });
 
+        const imagePath = req.file ? req.file.path.replace(/\\/g, "/") : null;
+
         const newTicket = new Ticket({
             title,
             description,
@@ -161,7 +243,7 @@ router.post("/", upload.single("image"), async (req, res) => {
             company_id: company_id || null,
             department_id,
             raised_by,
-            image: req.file ? req.file.path : null,
+            image: imagePath,
         });
 
         const savedTicket = await newTicket.save();
@@ -188,6 +270,7 @@ router.put("/:id", async (req, res) => {
             description,
             priority_id,
             status_id,
+            status,
             image,
             approval_status,
             assigned_to,
@@ -195,19 +278,31 @@ router.put("/:id", async (req, res) => {
             approved_at,
         } = req.body;
 
+        // If status_id is provided, fetch the status name and update both status_id and status
+        let updateData = {
+            ...(title && { title }),
+            ...(description && { description }),
+            ...(priority_id && { priority_id }),
+            ...(status_id && { status_id }),
+            ...(status && { status }),
+            ...(image && { image }),
+            ...(approval_status && { approval_status }),
+            ...(assigned_to && { assigned_to }),
+            ...(approver_id && { approver_id }),
+            ...(approved_at && { approved_at }),
+        };
+
+        // If status_id is provided but status string is not, fetch the status name from the database
+        if (status_id && !status) {
+            const statusObj = await TicketStatus.findById(status_id);
+            if (statusObj) {
+                updateData.status = statusObj.name;
+            }
+        }
+
         const updatedTicket = await Ticket.findByIdAndUpdate(
             req.params.id,
-            {
-                ...(title && { title }),
-                ...(description && { description }),
-                ...(priority_id && { priority_id }),
-                ...(status_id && { status_id }),
-                ...(image && { image }),
-                ...(approval_status && { approval_status }),
-                ...(assigned_to && { assigned_to }),
-                ...(approver_id && { approver_id }),
-                ...(approved_at && { approved_at }),
-            },
+            updateData,
             { new: true, runValidators: true },
         )
             .populate("raised_by", "name email mobile")

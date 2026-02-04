@@ -17,7 +17,7 @@ const CreateTicket = ({
         title: "",
         description: "",
         priority_id: "",
-        status_id: "",
+        status_id: "raised", // Default status is "Raised"
         image: null,
     });
 
@@ -48,6 +48,7 @@ const CreateTicket = ({
     const [preview, setPreview] = useState(null);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState("");
+    const [successMessage, setSuccessMessage] = useState("");
     const [companies, setCompanies] = useState([]);
     const [departments, setDepartments] = useState([]);
     const [priorities, setPriorities] = useState([]);
@@ -151,7 +152,24 @@ const CreateTicket = ({
             dataToSend.append("title", formData.title);
             dataToSend.append("description", formData.description);
             dataToSend.append("priority_id", formData.priority_id);
-            dataToSend.append("status_id", formData.status_id);
+            // Map display status (e.g., "raised") to actual status ObjectId if available
+            let statusToSend = formData.status_id;
+            try {
+                if (
+                    (!statusToSend || statusToSend === "raised") &&
+                    Array.isArray(ticketStatuses)
+                ) {
+                    const found = ticketStatuses.find(
+                        (s) => String(s.name).toLowerCase() === "raised",
+                    );
+                    if (found && (found._id || found.id)) {
+                        statusToSend = found._id || found.id;
+                    }
+                }
+            } catch (err) {
+                console.warn("Error mapping status to id:", err);
+            }
+            dataToSend.append("status_id", statusToSend);
             dataToSend.append("raised_by", userId); // Add current user ID
 
             // Log FormData for debugging
@@ -173,20 +191,21 @@ const CreateTicket = ({
                     title: formData.title || undefined,
                     description: formData.description || undefined,
                     priority_id: formData.priority_id || undefined,
-                    status: formData.status || undefined,
+                    status_id: formData.status_id || undefined,
                 };
 
                 await updateTicket(initialData._id, updatePayload);
-                alert("Ticket updated successfully!");
+                setSuccessMessage("Ticket updated successfully!");
                 if (onTicketUpdated) onTicketUpdated();
+                // Auto dismiss
+                setTimeout(() => setSuccessMessage(""), 3000);
             } else {
                 if (formData.image) {
                     dataToSend.append("image", formData.image);
                 }
 
                 await createTicket(dataToSend);
-
-                alert("Ticket created successfully!");
+                setSuccessMessage("Ticket created successfully!");
                 // Reset form
                 setFormData({
                     company_id: "",
@@ -200,6 +219,8 @@ const CreateTicket = ({
                 setPreview(null);
 
                 if (onTicketCreated) onTicketCreated(); // Refresh list if parent exists
+                // Auto dismiss success message
+                setTimeout(() => setSuccessMessage(""), 3000);
             }
         } catch (err) {
             setError(err.message);
@@ -211,6 +232,9 @@ const CreateTicket = ({
     return (
         <div className="ticket-form-container">
             <div className="ticket-card">
+                {successMessage && (
+                    <div className="success-card">{successMessage}</div>
+                )}
                 {error && <div className="error-message">{error}</div>}
 
                 <form onSubmit={handleSubmit}>
@@ -326,27 +350,51 @@ const CreateTicket = ({
 
                         <div className="form-group">
                             <label>Status</label>
-                            <select
-                                name="status_id"
-                                value={formData.status_id}
-                                onChange={handleChange}
-                                disabled={statusesLoading}
-                                required>
-                                {statusesLoading ? (
-                                    <option>Loading...</option>
-                                ) : (
-                                    <>
-                                        <option value="">
-                                            -- Select Status --
-                                        </option>
-                                        {ticketStatuses.map((s) => (
+                            {isEdit ? (
+                                <select
+                                    name="status_id"
+                                    value={formData.status_id}
+                                    onChange={handleChange}
+                                    disabled={statusesLoading}
+                                >
+                                    <option value="">
+                                        {statusesLoading
+                                            ? "Loading..."
+                                            : "-- Select Status --"}
+                                    </option>
+                                    {ticketStatuses
+                                        .filter((s) => {
+                                            // If status tied to a company, only show matching company statuses
+                                            if (!s.company_id) return true;
+                                            const compId =
+                                                s.company_id._id || s.company_id;
+                                            return (
+                                                String(compId) ===
+                                                String(formData.company_id)
+                                            );
+                                        })
+                                        .map((s) => (
                                             <option key={s._id} value={s._id}>
                                                 {s.name}
                                             </option>
                                         ))}
-                                    </>
-                                )}
-                            </select>
+                                </select>
+                            ) : (
+                                <input
+                                    type="text"
+                                    value="Raised"
+                                    disabled
+                                    className="status-field-raised"
+                                    style={{
+                                        backgroundColor: "#fff3cd",
+                                        borderColor: "#ffc107",
+                                        cursor: "not-allowed",
+                                        fontWeight: "600",
+                                        color: "#856404",
+                                    }}
+                                />
+                            )}
+                         
                         </div>
                     </div>
 
@@ -369,7 +417,7 @@ const CreateTicket = ({
                         type="submit"
                         className="submit-btn"
                         disabled={loading}>
-                        {loading ? "Submitting..." : "Create Ticket"}
+                        {loading ? "Saving..." : "Save"}
                     </button>
                 </form>
             </div>

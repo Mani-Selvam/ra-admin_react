@@ -20,10 +20,10 @@ const Header = ({sidebarOpen, setIsSidebarOpen}) => {
                         </span>
                     </Col>
 
-                    <Col xs="6" sm="8" className="d-flex align-items-center justify-content-end header-right p-0">
+                 <Col xs="6" sm="8" className="d-flex align-items-center justify-content-end header-right p-0">
                         <HeaderMenu/>
-                    </Col>
-                </Row>
+                    </Col>         
+                           </Row>
             </Container>
         </header>
     )

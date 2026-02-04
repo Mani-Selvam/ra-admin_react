@@ -73,6 +73,9 @@ exports.getTickets = async (req, res) => {
             .populate("department_id", "name")
             .populate("raised_by", "name email")
             .populate("assigned_to", "name email")
+            .populate("status_id", "name") // ✅ IMPORTANT: Populate status_id to show status name
+            .populate("priority_id", "name")
+            .populate("company_id", "name")
             .sort({ createdAt: -1 });
 
         res.status(200).json({
@@ -103,6 +106,15 @@ exports.updateTicket = async (req, res) => {
             new: true,
             runValidators: true,
         });
+
+        // Populate all relationships including status_id to return full details
+        await ticket.populate("institution_id", "name");
+        await ticket.populate("department_id", "name");
+        await ticket.populate("raised_by", "name email");
+        await ticket.populate("assigned_to", "name email");
+        await ticket.populate("status_id", "name"); // ✅ IMPORTANT: Populate status_id to show status name
+        await ticket.populate("priority_id", "name");
+        await ticket.populate("company_id", "name");
 
         res.status(200).json({ success: true, data: ticket });
     } catch (error) {

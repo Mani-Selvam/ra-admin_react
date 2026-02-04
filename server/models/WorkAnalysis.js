@@ -15,6 +15,10 @@ const WorkAnalysisSchema = new mongoose.Schema({
         type: String,
         required: true,
     },
+    worker_name: {
+        type: String,
+        trim: true,
+    },
     material_required: {
         type: String,
         enum: ["Yes", "No"],
@@ -42,6 +46,10 @@ const WorkAnalysisSchema = new mongoose.Schema({
         type: Date,
     },
     created_at: {
+        type: Date,
+        default: Date.now,
+    },
+    updated_at: {
         type: Date,
         default: Date.now,
     },

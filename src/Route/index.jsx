@@ -42,7 +42,8 @@ const TicketStatus = React.lazy(() => import("@/Pages/Master/TicketStatus"));
 
 const TicketList = React.lazy(() => import("@/Pages/Ticket/TicketList"));
 const CreateTicket = React.lazy(() => import("@/Pages/Ticket/CreateTicket"));
-const Work = React.lazy(() => import("@/Pages/Ticket/Work"));
+const Worker = React.lazy(() => import("@/Pages/Ticket/Worker"));
+const MaterialApprovedPage = React.lazy(() => import("@/Components/TicketDash/MaterialApprovedPage"));
 
 // // AppsRoutes
 const Calendar = React.lazy(() => import("@/Pages/Apps/Calendar"));
@@ -337,7 +338,7 @@ const Routes = () => {
                 { path: IndependentRoutes.WIDGETS_PAGE, element: <Widget /> },
 
                 // DashboardRoutes
-                { path: DashboardRoutes.MAIN_PAGE, element: <Ecommerce /> },
+                { path: DashboardRoutes.MAIN_PAGE, element: <Navigate to={MasterRoutes.COMPANY_MASTER_PAGE} replace /> },
                 {
                     path: DashboardRoutes.ECOMMERCE_PAGE,
                     element: <Ecommerce />,
@@ -385,7 +386,11 @@ const Routes = () => {
                 },
                 {
                     path: TicketRoutes.WORK_PAGE,
-                    element: <Work />,
+                    element: <Worker />,
+                },
+                {
+                    path: TicketRoutes.MATERIAL_APPROVED_PAGE,
+                    element: <MaterialApprovedPage />,
                 },
 
                 //

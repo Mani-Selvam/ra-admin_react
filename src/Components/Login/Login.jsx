@@ -33,9 +33,9 @@ const Login = () => {
                 console.log(
                     "Token and user stored, refreshing page to update auth state...",
                 );
-                // Refresh page to update AuthContext
+                // Redirect to company master page after successful login
                 setTimeout(() => {
-                    window.location.href = "/dashboard/ecommerce";
+                    window.location.href = "/master/company";
                 }, 500);
             } else {
                 console.log("No token in response");

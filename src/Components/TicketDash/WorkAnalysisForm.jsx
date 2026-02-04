@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from "react";
 import { createWorkAnalysis, getWorkAnalysis } from "./workAnalysisAPI";
-import { getTickets } from "./ticketAPI";
+import { getTickets, updateTicket } from "./ticketAPI";
+import { getTicketStatuses } from "../MasterDash/ticketStatusApi";
+import { useAuth } from "../Login/AuthContext";
 import "./workAnalysis.css";
 
 const WorkAnalysisForm = ({
@@ -9,14 +11,29 @@ const WorkAnalysisForm = ({
     onSuccess,
     workerId,
     onAnalysisCreated,
+    initialData,
 }) => {
+    // Get logged-in user from AuthContext
+    const { user } = useAuth();
+    
     const initialFormData = {
         ticket_id: ticketId || "",
-        worker_id: workerId || "",
+        worker_id: user?.id || workerId || "",
+        worker_name: user?.name || "",
         material_required: "No",
         material_description: "",
-        approval_status: "Pending",
+        analysis_status: "Approved",
     };
+
+    // If parent provided previous submission data, use it to prefill
+    if (initialData) {
+        initialFormData.ticket_id = initialData.ticket_id?._id || initialData.ticket_id || initialFormData.ticket_id;
+        initialFormData.worker_id = initialData.worker_id || initialFormData.worker_id;
+        initialFormData.worker_name = initialData.worker_name || initialFormData.worker_name || "";
+        initialFormData.material_required = initialData.material_required || initialFormData.material_required;
+        initialFormData.material_description = initialData.material_description || initialFormData.material_description;
+        initialFormData.analysis_status = initialData.analysis_status || initialFormData.analysis_status;
+    }
 
     const [formData, setFormData] = useState(initialFormData);
     const [tickets, setTickets] = useState([]);
@@ -26,6 +43,7 @@ const WorkAnalysisForm = ({
     const [ticketsLoading, setTicketsLoading] = useState(false);
     const [successMsg, setSuccessMsg] = useState("");
     const [displayAnalysis, setDisplayAnalysis] = useState(null);
+    const [ticketStatuses, setTicketStatuses] = useState([]);
 
     // Helper function to safely convert any value to string
     const safeString = (value, fallback = "N/A") => {
@@ -57,7 +75,7 @@ const WorkAnalysisForm = ({
         setSuccessMsg("");
     };
 
-    // Fetch tickets on component mount
+    // Fetch tickets and ticket statuses on component mount
     useEffect(() => {
         const fetchTickets = async () => {
             setTicketsLoading(true);
@@ -70,7 +88,19 @@ const WorkAnalysisForm = ({
                 setTicketsLoading(false);
             }
         };
+        
+        const fetchStatuses = async () => {
+            try {
+                const statuses = await getTicketStatuses();
+                console.log("📊 Ticket Statuses loaded:", statuses);
+                setTicketStatuses(statuses || []);
+            } catch (error) {
+                console.error("Error fetching ticket statuses:", error.message);
+            }
+        };
+        
         fetchTickets();
+        fetchStatuses();
     }, []);
 
     // If component was opened for a specific ticket, ensure selectedTicket and formData reflect it
@@ -97,6 +127,27 @@ const WorkAnalysisForm = ({
         }
     }, [ticketId, ticketTitle, tickets]);
 
+    // If initialData changes (prefill for edit/return), update form state
+    useEffect(() => {
+        if (!initialData) return;
+        setFormData((fd) => ({
+            ...fd,
+            ticket_id: initialData.ticket_id?._id || initialData.ticket_id || fd.ticket_id,
+            worker_id: initialData.worker_id || fd.worker_id,
+            worker_name: initialData.worker_name || fd.worker_name,
+            material_required: initialData.material_required || fd.material_required,
+            material_description: initialData.material_description || fd.material_description,
+            analysis_status: initialData.analysis_status || fd.analysis_status,
+        }));
+
+        // If ticket info included, set selectedTicket for display
+        if (initialData.ticket_id) {
+            const t = tickets.find((t) => (t._id === (initialData.ticket_id._id || initialData.ticket_id)));
+            if (t) setSelectedTicket(t);
+            else setSelectedTicket({ _id: initialData.ticket_id._id || initialData.ticket_id, ticket_id: initialData.ticket_id.ticket_id || "", title: initialData.ticket_id.title || "" });
+        }
+    }, [initialData]);
+
     const handleTicketChange = (e) => {
         const ticketIdValue = e.target.value;
         const ticket = tickets.find((t) => t._id === ticketIdValue);
@@ -108,10 +159,22 @@ const WorkAnalysisForm = ({
     };
 
     const handleToggle = (value) => {
-        setFormData({ ...formData, material_required: value });
+        console.log("🔘 Material toggle clicked:", value);
+        // When material is NOT required (No), clear the material description
+        // Keep images regardless - they are work documentation
+        const updatedFormData = {
+            ...formData,
+            material_required: value,
+            analysis_status: value === "Yes" ? "Pending" : "Approved",
+        };
+        
         if (value === "No") {
-            setImages([]);
+            updatedFormData.material_description = "";
         }
+        
+        setFormData(updatedFormData);
+        console.log("📝 Form data updated - material_required:", value);
+        console.log("📝 Current images array:", images);
     };
 
     const handleFileChange = (e) => {
@@ -137,20 +200,81 @@ const WorkAnalysisForm = ({
                 "material_description",
                 formData.material_description,
             );
+            dataToSend.append("analysis_status", formData.analysis_status);
 
-            images.forEach((img) => {
-                dataToSend.append("images", img);
-            });
+            console.log("🔵 Work Analysis Form Submission");
+            console.log("   Ticket ID:", formData.ticket_id);
+            console.log("   Worker ID:", formData.worker_id || workerId);
+            console.log("   Material Required:", formData.material_required);
+            console.log("   Material Description:", formData.material_description);
+            console.log("   Images Count:", images.length);
+            console.log("   Images Array:", images);
+
+            // Append images with detailed logging
+            if (images && images.length > 0) {
+                images.forEach((img, index) => {
+                    console.log(`   Appending image ${index}:`, img.name, img.size, img.type);
+                    dataToSend.append("images", img);
+                });
+            } else {
+                console.log("   ⚠️  NO IMAGES TO APPEND!");
+            }
+
+            // Log FormData contents
+            console.log("   FormData keys:", Array.from(dataToSend.keys()));
+            console.log("   FormData entries:", Array.from(dataToSend.entries()));
 
             const response = await createWorkAnalysis(dataToSend);
+            console.log("✅ Work Analysis Created:", response);
+            
             setSuccessMsg("Work Analysis Submitted Successfully!");
             setDisplayAnalysis(response);
+
+            // Update ticket status directly (same pattern as TicketList's handleMaterialToggle)
+            try {
+                const ticketId = formData.ticket_id;
+                const statusName = formData.material_required === "Yes" ? "Material Request" : "Material Approved";
+                
+                console.log("🔄 Updating ticket status after form submission");
+                console.log("   Status Name:", statusName);
+                console.log("   Available Statuses:", ticketStatuses);
+                
+                // Find exact status match from master list
+                let statusId = null;
+                let statusObj = null;
+                if (ticketStatuses && ticketStatuses.length > 0) {
+                    statusObj = ticketStatuses.find((s) => String(s.name).toLowerCase() === String(statusName).toLowerCase());
+                    statusId = statusObj?._id || statusObj?.id || null;
+                    console.log("   Found Status Object:", statusObj);
+                }
+                
+                const updatePayload = statusId ? { status_id: statusId } : { status: statusName };
+                console.log("   Update Payload:", updatePayload);
+                
+                await updateTicket(ticketId, updatePayload);
+                console.log("🟢 Ticket status updated to:", statusName);
+                
+                // Update selectedTicket state immediately
+                if (selectedTicket && String(selectedTicket._id) === String(ticketId)) {
+                    const updatedTicket = {
+                        ...selectedTicket,
+                        status_id: statusObj ? { _id: statusObj._id, name: statusObj.name } : { name: statusName },
+                        status: statusName,
+                    };
+                    setSelectedTicket(updatedTicket);
+                    console.log("✅ Selected ticket updated in state");
+                }
+            } catch (statusError) {
+                console.error("⚠️ Failed to update ticket status:", statusError);
+                // Don't fail the whole submission if status update fails
+            }
 
             // Reset form completely
             resetForm();
 
             // Notify parent component
             if (onAnalysisCreated) {
+                console.log("📞 Calling onAnalysisCreated callback");
                 onAnalysisCreated();
             }
 
@@ -161,6 +285,7 @@ const WorkAnalysisForm = ({
 
             if (onSuccess) setTimeout(onSuccess, 1500);
         } catch (error) {
+            console.error("❌ Error submitting work analysis:", error);
             alert(error.message);
         } finally {
             setLoading(false);
@@ -261,22 +386,20 @@ const WorkAnalysisForm = ({
                                 )}
                             </div>
 
-                            {/* Worker ID */}
+                            {/* Worker Name */}
                             <div className="wa-group">
-                                <label>Worker ID *</label>
+                                <label>Worker Name *</label>
                                 <input
                                     type="text"
-                                    value={formData.worker_id}
-                                    onChange={(e) =>
-                                        setFormData({
-                                            ...formData,
-                                            worker_id: e.target.value,
-                                        })
-                                    }
-                                    placeholder="Enter worker ID"
+                                    value={user?.name || "Not logged in"}
+                                    disabled
                                     className="wa-input"
-                                    required
+                                    style={{
+                                        backgroundColor: "#f3f4f6",
+                                        cursor: "not-allowed",
+                                    }}
                                 />
+                                
                             </div>
                         </div>
 
@@ -306,9 +429,29 @@ const WorkAnalysisForm = ({
                                             Status:
                                         </span>
                                         <span
-                                            className={`wa-status-badge ${safeString(selectedTicket?.approval_status).toLowerCase()}`}>
+                                            className={`wa-status-badge ${safeString(selectedTicket?.status_id?.name || selectedTicket?.status).toLowerCase()}`}
+                                            style={{
+                                                background: (() => {
+                                                    const status = safeString(selectedTicket?.status_id?.name || selectedTicket?.status).toLowerCase();
+                                                    if (status.includes("closed")) return "#f3f4f6";
+                                                    if (status.includes("progress")) return "#e0e7ff";
+                                                    if (status.includes("resolved")) return "#dcfce7";
+                                                    return "#dbeafe";
+                                                })(),
+                                                color: (() => {
+                                                    const status = safeString(selectedTicket?.status_id?.name || selectedTicket?.status).toLowerCase();
+                                                    if (status.includes("closed")) return "#4b5563";
+                                                    if (status.includes("progress")) return "#3730a3";
+                                                    if (status.includes("resolved")) return "#166534";
+                                                    return "#1e40af";
+                                                })(),
+                                                padding: "6px 12px",
+                                                borderRadius: "6px",
+                                                fontSize: "12px",
+                                                fontWeight: "600"
+                                            }}>
                                             {safeString(
-                                                selectedTicket?.approval_status,
+                                                selectedTicket?.status_id?.name || selectedTicket?.status,
                                                 "Unknown",
                                             )}
                                         </span>
@@ -351,6 +494,25 @@ const WorkAnalysisForm = ({
                                     onClick={() => handleToggle("No")}>
                                     No
                                 </button>
+                            </div>
+                        </div>
+
+                        {/* Analysis Status Display */}
+                        <div className="wa-status-display">
+                            <div className="wa-detail-row">
+                                <span className="wa-label">Analysis Status:</span>
+                                <span
+                                    className={`wa-status-badge ${formData.analysis_status.toLowerCase().replace(/ /g, "-")}`}
+                                    style={{
+                                        background: formData.analysis_status === "Approved" ? "#dcfce7" : "#fef3c7",
+                                        color: formData.analysis_status === "Approved" ? "#166534" : "#92400e",
+                                        padding: "6px 12px",
+                                        borderRadius: "6px",
+                                        fontSize: "12px",
+                                        fontWeight: "600"
+                                    }}>
+                                    {formData.analysis_status}
+                                </span>
                             </div>
                         </div>
 
@@ -430,7 +592,7 @@ const WorkAnalysisForm = ({
                             type="submit"
                             className="wa-submit-btn"
                             disabled={loading}>
-                            {loading ? "Submitting..." : "Submit Analysis"}
+                            {loading ? "Saving..." : "Save"}
                         </button>
                     </form>
                 </div>
@@ -500,13 +662,18 @@ const WorkAnalysisForm = ({
                                     </span>
                                 </div>
                                 <div className="wa-detail-item">
-                                    <label>Approval Status:</label>
+                                    <label>Analysis Status:</label>
                                     <span
-                                        className={`wa-approval-badge ${safeString(displayAnalysis?.approval_status).toLowerCase()}`}>
-                                        {safeString(
-                                            displayAnalysis?.approval_status,
-                                            "Unknown",
-                                        )}
+                                        style={{
+                                            background: displayAnalysis?.material_required === "Yes" ? "#fef3c7" : "#dcfce7",
+                                            color: displayAnalysis?.material_required === "Yes" ? "#92400e" : "#166534",
+                                            padding: "6px 12px",
+                                            borderRadius: "6px",
+                                            fontSize: "12px",
+                                            fontWeight: "600",
+                                            display: "inline-block"
+                                        }}>
+                                        {displayAnalysis?.material_required === "Yes" ? "pending" : "Approved"}
                                     </span>
                                 </div>
                                 <div className="wa-detail-item">

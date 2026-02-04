@@ -39,9 +39,16 @@ nav {
     .app-logo {
         padding: 1.5rem 1.5rem 0 1.5rem;
         .logo {
+            width: 0px;
+            height: 60px;
+            border-radius: 16px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
             img {
-                width: 140px;
+                width: 60px;
                 float: left;
+
             }
         }
     }

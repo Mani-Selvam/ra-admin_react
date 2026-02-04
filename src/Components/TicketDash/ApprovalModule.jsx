@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from "react";
 import { createApproval } from "./approvalAPI";
 import { getTickets, updateTicket } from "./ticketAPI";
 import { getUsers } from "./userAPI";
+import { getTicketStatuses } from "../MasterDash/ticketStatusApi";
 import "./approvalForm.css";
 
 const ApprovalModule = ({
@@ -9,23 +10,55 @@ const ApprovalModule = ({
     ticketTitle,
     onApprovalSuccess,
     approverId,
+    initialData,
 }) => {
     // Get logged-in user from localStorage
     const loggedInUser = JSON.parse(localStorage.getItem("user") || "{}");
 
-    const [formData, setFormData] = useState({
-        ticket_id: ticketId || "",
-        approver_id: approverId || loggedInUser?.id || "", // Auto-set from logged-in user
-        approval_status: "Approved", // Default - Auto Selected
-        assigned_to: [], // Array of selected IDs
-        remarks: "",
-        approved_at: new Date().toISOString(), // Current timestamp
-    });
+    // Helper to extract user IDs from assigned_to array (handles both ID strings and user objects)
+    const extractUserIds = (assignedTo) => {
+        if (!assignedTo) return [];
+        if (!Array.isArray(assignedTo)) return [];
+        return assignedTo.map(item => {
+            if (typeof item === 'string') return item;
+            if (typeof item === 'object' && (item._id || item.id)) return item._id || item.id;
+            return item;
+        });
+    };
+
+    // Build initial form data with prefill support
+    const buildInitialFormData = () => {
+        const base = {
+            ticket_id: ticketId || "",
+            approver_id: approverId || loggedInUser?.id || "",
+            approval_status: "Approved",
+            assigned_to: [],
+            remarks: "",
+            approved_at: new Date().toISOString(),
+        };
+
+        // If initialData provided (editing existing approval), prefill those values
+        if (initialData) {
+            base.ticket_id = initialData.ticket_id?._id || initialData.ticket_id || base.ticket_id;
+            base.approver_id = initialData.approver_id || base.approver_id;
+            base.approval_status = initialData.approval_status || base.approval_status;
+            base.assigned_to = extractUserIds(initialData.assigned_to);
+            base.remarks = initialData.remarks !== undefined ? initialData.remarks : "";
+            base.approved_at = initialData.approved_at || base.approved_at;
+        }
+        return base;
+    };
+
+    const [formData, setFormData] = useState(buildInitialFormData());
 
     const [loading, setLoading] = useState(false);
     const [message, setMessage] = useState({ text: "", type: "" });
+    const [toastVisible, setToastVisible] = useState(false);
+    const [toastText, setToastText] = useState("");
+    const [toastType, setToastType] = useState("");
     const [tickets, setTickets] = useState([]);
     const [users, setUsers] = useState([]);
+    const [ticketStatuses, setTicketStatuses] = useState([]);
     const [dataLoading, setDataLoading] = useState(true);
     const [dropdownOpen, setDropdownOpen] = useState(false);
     const dropdownRef = useRef(null);
@@ -35,12 +68,14 @@ const ApprovalModule = ({
         const fetchData = async () => {
             try {
                 setDataLoading(true);
-                const [ticketsData, usersData] = await Promise.all([
+                const [ticketsData, usersData, statusesData] = await Promise.all([
                     getTickets(),
                     getUsers(),
+                    getTicketStatuses(),
                 ]);
                 setTickets(ticketsData || []);
                 setUsers(usersData || []);
+                setTicketStatuses(statusesData || []);
             } catch (error) {
                 console.error("Error fetching data:", error);
                 setMessage({ text: "Failed to load data", type: "error" });
@@ -50,6 +85,24 @@ const ApprovalModule = ({
         };
         fetchData();
     }, []);
+
+    // Sync form data when initialData changes (for editing/reopening)
+    useEffect(() => {
+        if (!initialData) return;
+        console.log("ApprovalModule: Syncing initialData:", initialData);
+        setFormData((fd) => {
+            const newFormData = {
+                ticket_id: initialData.ticket_id?._id || initialData.ticket_id || fd.ticket_id,
+                approver_id: initialData.approver_id || fd.approver_id,
+                approval_status: initialData.approval_status || fd.approval_status,
+                assigned_to: extractUserIds(initialData.assigned_to),
+                remarks: initialData.remarks !== undefined ? initialData.remarks : fd.remarks,
+                approved_at: initialData.approved_at || fd.approved_at,
+            };
+            console.log("ApprovalModule: New form data:", newFormData);
+            return newFormData;
+        });
+    }, [initialData]);
 
     // Close dropdown when clicking outside
     useEffect(() => {
@@ -116,7 +169,7 @@ const ApprovalModule = ({
             const approvalData = await createApproval(formData);
             console.log("Approval created successfully:", approvalData);
 
-            // 2. Update ticket with approval status and assigned users
+            // 2. Update ticket with approval status, assigned users and map status
             console.log("Step 2: Updating ticket...");
             const ticketUpdateData = {
                 approval_status: formData.approval_status,
@@ -124,8 +177,44 @@ const ApprovalModule = ({
                 approver_id: formData.approver_id,
                 approved_at: formData.approved_at,
             };
-            console.log("Ticket update data:", ticketUpdateData);
 
+            // Determine ticket status_id based on approval result (e.g., Approved -> 'Approved')
+            try {
+                const ticketObj = tickets.find(
+                    (t) => String(t._id) === String(formData.ticket_id),
+                );
+                const companyId =
+                    ticketObj?.company_id?._id || ticketObj?.company_id || null;
+
+                const desiredStatusKey = String(
+                    (formData.approval_status || "").toLowerCase(),
+                );
+
+                if (desiredStatusKey) {
+                    // Prefer a matching status with same company_id, fallback to global
+                    let found = ticketStatuses.find((s) => {
+                        const sName = String(s.name || "").toLowerCase();
+                        if (!sName.includes(desiredStatusKey)) return false;
+                        if (!s.company_id) return true;
+                        const sComp = s.company_id._id || s.company_id;
+                        return String(sComp) === String(companyId);
+                    });
+
+                    if (!found) {
+                        found = ticketStatuses.find((s) =>
+                            String(s.name || "").toLowerCase().includes(desiredStatusKey),
+                        );
+                    }
+
+                    if (found && (found._id || found.id)) {
+                        ticketUpdateData.status_id = found._id || found.id;
+                    }
+                }
+            } catch (err) {
+                console.warn("Failed to map approval to ticket status_id:", err);
+            }
+
+            console.log("Ticket update data:", ticketUpdateData);
             const ticketUpdateResponse = await updateTicket(
                 formData.ticket_id,
                 ticketUpdateData,
@@ -137,15 +226,20 @@ const ApprovalModule = ({
                 type: "success",
             });
 
-            // Reset form after delay
+            // Show popup toast message
+            setToastText("Approval recorded successfully and ticket updated!");
+            setToastType("success");
+            setToastVisible(true);
+            setTimeout(() => setToastVisible(false), 3000);
+
+            // After successful submission, keep all form data intact
             setTimeout(() => {
                 if (onApprovalSuccess) {
                     console.log("Calling onApprovalSuccess callback...");
                     onApprovalSuccess();
-                } else {
-                    // Optional: Clear form if standalone
-                    setFormData({ ...formData, remarks: "", assigned_to: [] });
                 }
+                // Form data is NOT reset - it will remain as is
+                // User can see their previous submission when form reopens
             }, 1500);
         } catch (error) {
             console.error("Approval process error:", error);
@@ -163,6 +257,18 @@ const ApprovalModule = ({
             .join(", ");
     };
 
+    // Display-friendly ticket id (prefer ticket_number or ticket_id over raw _id)
+    const getDisplayTicketId = (id) => {
+        try {
+            if (!id) return "";
+            const found = tickets.find((t) => String(t._id) === String(id));
+            if (found) return found.ticket_number || found.ticket_id || id;
+            return id;
+        } catch (err) {
+            return id;
+        }
+    };
+
     return (
         <div className="approval-container">
             <div className="approval-card">
@@ -170,6 +276,13 @@ const ApprovalModule = ({
                 {message.text && (
                     <div className={`alert ${message.type}`}>
                         {message.text}
+                    </div>
+                )}
+
+                {/* Toast Popup */}
+                {toastVisible && (
+                    <div className={`toast ${toastType}`} role="status">
+                        {toastText}
                     </div>
                 )}
 
@@ -187,7 +300,9 @@ const ApprovalModule = ({
                                             <input
                                                 type="text"
                                                 value={
-                                                    ticketTitle || "Loading..."
+                                                    getDisplayTicketId(
+                                                        ticketId,
+                                                    ) || "Loading..."
                                                 }
                                                 disabled
                                                 className="form-control"
@@ -359,7 +474,7 @@ const ApprovalModule = ({
                                 </div>
 
                                 {/* 6. Approved At */}
-                                <div className="form-group">
+                                <div className="form-group full-width">
                                     <label>Approved At</label>
                                     <input
                                         type="datetime-local"
@@ -386,8 +501,8 @@ const ApprovalModule = ({
                                     className="submit-btn"
                                     disabled={loading}>
                                     {loading
-                                        ? "Processing..."
-                                        : "Submit Decision"}
+                                        ? "Saving..."
+                                        : "Save"}
                                 </button>
                             </div>
                         </>

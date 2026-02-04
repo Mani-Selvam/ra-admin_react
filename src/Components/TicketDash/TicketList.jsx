@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from "react";
 import { getTickets, updateTicket, deleteTicket } from "./ticketAPI";
 import { getWorkAnalysis } from "./workAnalysisAPI";
+import { getTicketStatuses } from "../MasterDash/ticketStatusApi";
+import { decryptTicketId } from "../../_helper/encryption";
 import CreateTicket from "./CreateTicket";
 import ApprovalModule from "./ApprovalModule";
 import WorkAnalysisForm from "./WorkAnalysisForm";
@@ -117,6 +119,7 @@ const TicketList = () => {
     const [tickets, setTickets] = useState([]);
     const [loading, setLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState("");
+    const [ticketStatuses, setTicketStatuses] = useState([]);
     const [toast, setToast] = useState({
         show: false,
         message: "",
@@ -179,15 +182,25 @@ const TicketList = () => {
             const analyses = Array.isArray(data) ? data : data.data || [];
             setWorkAnalyses(analyses);
         } catch (error) {
-            console.error("Error fetching work analyses:", error);
+            console.error("Error fetching work details:", error);
         } finally {
             setLoadingAnalyses(false);
+        }
+    };
+
+    const fetchTicketStatuses = async () => {
+        try {
+            const data = await getTicketStatuses();
+            setTicketStatuses(Array.isArray(data) ? data : data.data || []);
+        } catch (error) {
+            console.error("Error fetching ticket statuses:", error);
         }
     };
 
     useEffect(() => {
         fetchTickets();
         fetchWorkAnalyses();
+        fetchTicketStatuses();
     }, []);
 
     // --- 2. Helper: Safe Getters ---
@@ -261,6 +274,59 @@ const TicketList = () => {
         setEditTicket(null);
         fetchTickets();
         showToast("Ticket created successfully!", "success");
+    };
+
+    // Toggle material approval for a ticket's analysis -> updates ticket status
+    const handleMaterialToggle = async (analysis, makePending) => {
+        try {
+            const ticketId = viewTicket?._id || (analysis.ticket_id && (analysis.ticket_id._id || analysis.ticket_id));
+            if (!ticketId) {
+                showToast("Ticket not found for this analysis", "error");
+                return;
+            }
+
+            // Map "Material Required" to "Material Request" and "Material Approved" stays the same
+            const statusName = makePending ? "Material Request" : "Material Approved";
+            const ticketObj = tickets.find((t) => String(t._id) === String(ticketId));
+            const companyId = ticketObj?.company_id?._id || ticketObj?.company_id || null;
+
+            console.log("Looking for status:", statusName);
+            console.log("Available ticketStatuses:", ticketStatuses);
+
+            // Find exact status match from master list
+            let statusId = null;
+            let statusObj = null;
+            if (ticketStatuses && ticketStatuses.length > 0) {
+                // Look for exact match first
+                statusObj = ticketStatuses.find((s) => String(s.name).toLowerCase() === String(statusName).toLowerCase());
+                statusId = statusObj?._id || statusObj?.id || null;
+                console.log("Found status:", statusObj);
+            }
+
+            const updatePayload = statusId ? { status_id: statusId } : { status: statusName };
+            console.log("Sending payload:", updatePayload);
+            await updateTicket(ticketId, updatePayload);
+
+            showToast(`Ticket status updated to ${statusName}`, "success");
+            
+            // Update viewTicket immediately with new status
+            if (viewTicket && String(viewTicket._id) === String(ticketId)) {
+                const updatedViewTicket = {
+                    ...viewTicket,
+                    status_id: statusObj ? { _id: statusObj._id, name: statusObj.name } : { name: statusName },
+                    status: statusName,
+                };
+                console.log("Updated viewTicket:", updatedViewTicket);
+                setViewTicket(updatedViewTicket);
+            }
+
+            // Re-fetch lists in background
+            fetchTickets();
+            fetchWorkAnalyses();
+        } catch (err) {
+            console.error("Failed to update ticket status:", err);
+            showToast("Failed to update ticket status", "error");
+        }
     };
 
     // --- 4. Filtering ---
@@ -545,11 +611,11 @@ const TicketList = () => {
                                 {/* Work Analysis List for this ticket */}
                                 <div style={styles.ticketSection}>
                                     <h4 style={styles.sectionTitle}>
-                                        Work Analyses
+                                        Work Details
                                     </h4>
                                     {loadingAnalyses ? (
                                         <p style={{ color: "#6b7280" }}>
-                                            Loading analyses...
+                                            Loading details...
                                         </p>
                                     ) : (
                                         (() => {
@@ -566,7 +632,7 @@ const TicketList = () => {
                                                         style={{
                                                             color: "#6b7280",
                                                         }}>
-                                                        No work analyses for
+                                                        No work Details for
                                                         this ticket.
                                                     </p>
                                                 );
@@ -614,9 +680,10 @@ const TicketList = () => {
                                                                         </strong>
                                                                         {" — "}
                                                                         <span>
-                                                                            {an.worker_id ||
-                                                                                an.worker_name ||
-                                                                                "-"}
+                                                                            {an.worker_name 
+                                                                                ? decryptTicketId(an.worker_name)
+                                                                                : an.worker_id ||
+                                                                                  "-"}
                                                                         </span>
                                                                     </div>
                                                                     <div
@@ -667,32 +734,51 @@ const TicketList = () => {
                                                                         gap: 8,
                                                                         alignItems:
                                                                             "center",
+                                                                        flexWrap:
+                                                                            "wrap",
                                                                     }}>
-                                                                    <div
-                                                                        style={{
-                                                                            fontSize: 12,
-                                                                            color: "#6b7280",
-                                                                        }}>
-                                                                        <strong>
-                                                                            Status:
-                                                                        </strong>{" "}
-                                                                        {an.approval_status ||
-                                                                            "Pending"}
+                                                                    <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                                                                        <strong style={{ fontSize: 12 }}>Material:</strong>
+                                                                        <button
+                                                                            onClick={() => handleMaterialToggle(an, true)}
+                                                                            style={{
+                                                                                padding: "6px 8px",
+                                                                                borderRadius: 6,
+                                                                                border: an.material_required === "Yes" ? "1px solid #f59e0b" : "1px solid #e5e7eb",
+                                                                                background: an.material_required === "Yes" ? "#fffbeb" : "white",
+                                                                                color: an.material_required === "Yes" ? "#92400e" : "#475569",
+                                                                                cursor: "pointer",
+                                                                                fontSize: 12,
+                                                                                fontWeight: 600,
+                                                                            }}>
+                                                                            Pending
+                                                                        </button>
+                                                                        <button
+                                                                            onClick={() => handleMaterialToggle(an, false)}
+                                                                            style={{
+                                                                                padding: "6px 8px",
+                                                                                borderRadius: 6,
+                                                                                border: an.material_required === "No" ? "1px solid #10b981" : "1px solid #e5e7eb",
+                                                                                background: an.material_required === "No" ? "#ecfdf5" : "white",
+                                                                                color: an.material_required === "No" ? "#065f46" : "#475569",
+                                                                                cursor: "pointer",
+                                                                                fontSize: 12,
+                                                                                fontWeight: 600,
+                                                                            }}>
+                                                                            Approved
+                                                                        </button>
                                                                     </div>
                                                                     {an.approved_by && (
                                                                         <div
                                                                             style={{
-                                                                                fontSize: 12,
+                                                                                fontSize: 11,
                                                                                 color: "#6b7280",
                                                                             }}>
                                                                             <strong>
                                                                                 Approved
                                                                                 By:
                                                                             </strong>{" "}
-                                                                            {an
-                                                                                .approved_by
-                                                                                .name ||
-                                                                                an.approved_by}
+                                                                            {an.approved_by.name || an.approved_by}
                                                                         </div>
                                                                     )}
                                                                 </div>
@@ -782,22 +868,25 @@ const TicketList = () => {
                                                                         marginTop: 8,
                                                                     }}>
                                                                     <button
-                                                                        onClick={() =>
-                                                                            setSelectedAnalysis(
-                                                                                an,
-                                                                            )
-                                                                        }
+                                                                        onClick={() => {
+                                                                            setSelectedAnalysis({
+                                                                                ...an,
+                                                                                _viewImagesOnly: true
+                                                                            });
+                                                                        }}
                                                                         style={{
                                                                             padding:
                                                                                 "6px 8px",
                                                                             borderRadius: 6,
-                                                                            border: "1px solid #e5e7eb",
+                                                                            border: "1px solid #3b82f6",
                                                                             background:
-                                                                                "white",
+                                                                                "#eff6ff",
+                                                                            color: "#1e40af",
                                                                             cursor: "pointer",
                                                                             fontSize: 12,
+                                                                            fontWeight: 600,
                                                                         }}>
-                                                                        View
+                                                                        View Images
                                                                     </button>
                                                                 </div>
                                                             </div>
@@ -820,13 +909,16 @@ const TicketList = () => {
                     style={styles.modalOverlay}
                     onClick={() => setSelectedAnalysis(null)}>
                     <div
-                        style={styles.largeModal}
+                        style={{
+                            ...styles.largeModal,
+                            maxWidth: selectedAnalysis._viewImagesOnly ? "90%" : "600px",
+                        }}
                         onClick={(e) => e.stopPropagation()}>
                         <div style={styles.modalHeader}>
                             <h3 style={styles.modalTitle}>
-                                Analysis Details -{" "}
-                                {selectedAnalysis.analysis_id ||
-                                    selectedAnalysis._id}
+                                {selectedAnalysis._viewImagesOnly
+                                    ? "Analysis Images"
+                                    : `Analysis Details - ${selectedAnalysis.analysis_id || selectedAnalysis._id}`}
                             </h3>
                             <button
                                 onClick={() => setSelectedAnalysis(null)}
@@ -835,94 +927,198 @@ const TicketList = () => {
                             </button>
                         </div>
                         <div style={styles.modalBody}>
-                            <div style={{ display: "grid", gap: 12 }}>
+                            {selectedAnalysis._viewImagesOnly ? (
+                                // Images Only View - 50% width grid
                                 <div>
-                                    <strong>Ticket:</strong>{" "}
-                                    {selectedAnalysis.ticket_id?.title ||
-                                        selectedAnalysis.ticket_title ||
-                                        "-"}
-                                </div>
-                                <div>
-                                    <strong>Worker:</strong>{" "}
-                                    {selectedAnalysis.worker_id}
-                                </div>
-                                <div>
-                                    <strong>Material Required:</strong>{" "}
-                                    {selectedAnalysis.material_required}
-                                </div>
-                                {selectedAnalysis.material_description && (
-                                    <div>
-                                        <strong>Description:</strong>
-                                        <div style={{ marginTop: 6 }}>
-                                            {
-                                                selectedAnalysis.material_description
-                                            }
-                                        </div>
-                                    </div>
-                                )}
-                                <div>
-                                    <strong>Status:</strong>{" "}
-                                    {selectedAnalysis.approval_status}
-                                </div>
-                                {selectedAnalysis.approved_by && (
-                                    <div>
-                                        <strong>Approved By:</strong>{" "}
-                                        {selectedAnalysis.approved_by.name ||
-                                            selectedAnalysis.approved_by}
-                                    </div>
-                                )}
-
-                                {selectedAnalysis.uploaded_images &&
+                                    {selectedAnalysis.uploaded_images &&
                                     selectedAnalysis.uploaded_images.length >
-                                        0 && (
-                                        <div>
-                                            <strong>Images</strong>
-                                            <div
-                                                style={{
-                                                    display: "flex",
-                                                    gap: 8,
-                                                    marginTop: 8,
-                                                    flexWrap: "wrap",
-                                                }}>
-                                                {selectedAnalysis.uploaded_images.map(
-                                                    (img, i) => {
-                                                        const normalized =
-                                                            img &&
-                                                            typeof img ===
-                                                                "string"
-                                                                ? img.replace(
-                                                                      /\\/g,
-                                                                      "/",
-                                                                  )
-                                                                : img;
-                                                        const src =
-                                                            normalized &&
-                                                            normalized.startsWith(
-                                                                "http",
-                                                            )
-                                                                ? normalized
-                                                                : `http://localhost:5000/${normalized}`;
-                                                        return (
+                                        0 ? (
+                                        <div
+                                            style={{
+                                                display: "grid",
+                                                gridTemplateColumns:
+                                                    "repeat(auto-fit, minmax(50%, 1fr))",
+                                                gap: 16,
+                                            }}>
+                                            {selectedAnalysis.uploaded_images.map(
+                                                (img, i) => {
+                                                    const normalized =
+                                                        img &&
+                                                        typeof img ===
+                                                            "string"
+                                                            ? img.replace(
+                                                                  /\\/g,
+                                                                  "/",
+                                                              )
+                                                            : img;
+                                                    const src =
+                                                        normalized &&
+                                                        normalized.startsWith(
+                                                            "http",
+                                                        )
+                                                            ? normalized
+                                                            : `http://localhost:5000/${normalized}`;
+                                                    return (
+                                                        <div
+                                                            key={i}
+                                                            style={{
+                                                                display:
+                                                                    "flex",
+                                                                flexDirection:
+                                                                    "column",
+                                                                alignItems:
+                                                                    "center",
+                                                            }}>
                                                             <img
-                                                                key={i}
                                                                 src={src}
-                                                                alt={`wa-img-${i}`}
+                                                                alt={`image-${i}`}
                                                                 style={{
-                                                                    width: 140,
-                                                                    height: 100,
+                                                                    width: "100%",
+                                                                    height: "auto",
+                                                                    maxHeight:
+                                                                        "500px",
                                                                     objectFit:
-                                                                        "cover",
+                                                                        "contain",
                                                                     borderRadius: 8,
                                                                     border: "1px solid #e5e7eb",
+                                                                    cursor: "pointer",
+                                                                }}
+                                                                onClick={(
+                                                                    e,
+                                                                ) => {
+                                                                    e.stopPropagation();
                                                                 }}
                                                             />
-                                                        );
-                                                    },
-                                                )}
+                                                            <span
+                                                                style={{
+                                                                    marginTop: 8,
+                                                                    fontSize:
+                                                                        "12px",
+                                                                    color: "#6b7280",
+                                                                }}>
+                                                                Image {i + 1}
+                                                            </span>
+                                                        </div>
+                                                    );
+                                                },
+                                            )}
+                                        </div>
+                                    ) : (
+                                        <div
+                                            style={{
+                                                textAlign: "center",
+                                                padding: "40px",
+                                                color: "#9ca3af",
+                                            }}>
+                                            📷 No images uploaded
+                                        </div>
+                                    )}
+                                </div>
+                            ) : (
+                                // Original full details view
+                                <div
+                                    style={{
+                                        display: "grid",
+                                        gap: 12,
+                                    }}>
+                                    <div>
+                                        <strong>Ticket:</strong>{" "}
+                                        {selectedAnalysis.ticket_id?.title ||
+                                            selectedAnalysis.ticket_title ||
+                                            "-"}
+                                    </div>
+                                    <div>
+                                        <strong>Worker:</strong>{" "}
+                                        {selectedAnalysis.worker_name
+                                            ? decryptTicketId(
+                                                  selectedAnalysis.worker_name,
+                                              )
+                                            : selectedAnalysis.worker_id ||
+                                              "-"}
+                                    </div>
+                                    <div>
+                                        <strong>Material Required:</strong>{" "}
+                                        {selectedAnalysis.material_required}
+                                    </div>
+                                    {selectedAnalysis.material_description && (
+                                        <div>
+                                            <strong>Description:</strong>
+                                            <div
+                                                style={{
+                                                    marginTop: 6,
+                                                }}>
+                                                {
+                                                    selectedAnalysis.material_description
+                                                }
                                             </div>
                                         </div>
                                     )}
-                            </div>
+                                    <div>
+                                        <strong>Status:</strong>{" "}
+                                        {selectedAnalysis.approval_status}
+                                    </div>
+                                    {selectedAnalysis.approved_by && (
+                                        <div>
+                                            <strong>Approved By:</strong>{" "}
+                                            {selectedAnalysis.approved_by.name ||
+                                                selectedAnalysis.approved_by}
+                                        </div>
+                                    )}
+
+                                    {selectedAnalysis.uploaded_images &&
+                                        selectedAnalysis.uploaded_images
+                                            .length > 0 && (
+                                            <div>
+                                                <strong>Images</strong>
+                                                <div
+                                                    style={{
+                                                        display: "flex",
+                                                        gap: 8,
+                                                        marginTop: 8,
+                                                        flexWrap: "wrap",
+                                                    }}>
+                                                    {selectedAnalysis.uploaded_images.map(
+                                                        (img, i) => {
+                                                            const normalized =
+                                                                img &&
+                                                                typeof img ===
+                                                                    "string"
+                                                                    ? img.replace(
+                                                                          /\\/g,
+                                                                          "/",
+                                                                      )
+                                                                    : img;
+                                                            const src =
+                                                                normalized &&
+                                                                normalized.startsWith(
+                                                                    "http",
+                                                                )
+                                                                    ? normalized
+                                                                    : `http://localhost:5000/${normalized}`;
+                                                            return (
+                                                                <img
+                                                                    key={i}
+                                                                    src={
+                                                                        src
+                                                                    }
+                                                                    alt={`wa-img-${i}`}
+                                                                    style={{
+                                                                        width: 140,
+                                                                        height: 100,
+                                                                        objectFit:
+                                                                            "cover",
+                                                                        borderRadius: 8,
+                                                                        border: "1px solid #e5e7eb",
+                                                                    }}
+                                                                />
+                                                            );
+                                                        },
+                                                    )}
+                                                </div>
+                                            </div>
+                                        )}
+                                </div>
+                            )}
                         </div>
                     </div>
                 </div>
@@ -985,8 +1181,7 @@ const TicketList = () => {
                         onClick={(e) => e.stopPropagation()}>
                         <div style={styles.modalHeader}>
                             <h3 style={styles.modalTitle}>
-                                Work Analysis -{" "}
-                                {selectedTicketForAnalysis.ticket_number}
+                                Work Details - {selectedTicketForAnalysis.ticket_id}
                             </h3>
                             <button
                                 onClick={() => {
@@ -1001,15 +1196,53 @@ const TicketList = () => {
                             <WorkAnalysisForm
                                 ticketId={selectedTicketForAnalysis._id}
                                 ticketTitle={selectedTicketForAnalysis.title}
-                                onSuccess={() => {
+                                onAnalysisCreated={() => {
+                                    console.log("✅ Work Analysis Created - Updating Ticket Status");
+                                    
+                                    // Close modal first
                                     setShowWorkAnalysisModal(false);
                                     setSelectedTicketForAnalysis(null);
-                                    fetchTickets();
-                                    fetchWorkAnalyses();
+                                    
+                                    // Show success toast immediately
                                     showToast(
-                                        "Work Analysis submitted successfully!",
+                                        "Work Analysis submitted! Status updating...",
                                         "success",
                                     );
+                                    
+                                    // Refresh data with a delay to ensure backend has updated
+                                    setTimeout(async () => {
+                                        console.log("🔄 Refreshing tickets list...");
+                                        try {
+                                            await fetchTickets();
+                                            console.log("✅ Tickets refreshed");
+                                        } catch (err) {
+                                            console.error("❌ Error refreshing tickets:", err);
+                                        }
+                                        
+                                        try {
+                                            await fetchWorkAnalyses();
+                                            console.log("✅ Work details refreshed");
+                                        } catch (err) {
+                                            console.error("❌ Error refreshing analyses:", err);
+                                        }
+                                        
+                                        // Also refresh the viewTicket if it's open
+                                        if (viewTicket) {
+                                            console.log("🔄 Refreshing detail view...");
+                                            // Re-fetch fresh ticket data
+                                            try {
+                                                const updatedData = await getTickets(false);
+                                                const updatedTickets = Array.isArray(updatedData) ? updatedData : updatedData.data || [];
+                                                const freshTicket = updatedTickets.find(t => String(t._id) === String(viewTicket._id));
+                                                if (freshTicket) {
+                                                    console.log("✅ Detail view updated with new status:", freshTicket.status);
+                                                    setViewTicket(freshTicket);
+                                                }
+                                            } catch (err) {
+                                                console.error("❌ Error refreshing view ticket:", err);
+                                            }
+                                        }
+                                    }, 500);
                                 }}
                             />
                         </div>
@@ -1373,31 +1606,7 @@ const TicketList = () => {
                                                                 <path d="M9 12l2 2 4-4" />
                                                             </svg>
                                                         </button>
-                                                        <button
-                                                            onClick={() => {
-                                                                setSelectedTicketForAnalysis(
-                                                                    ticket,
-                                                                );
-                                                                setShowWorkAnalysisModal(
-                                                                    true,
-                                                                );
-                                                            }}
-                                                            title="Work Analysis"
-                                                            style={{
-                                                                ...styles.iconButton,
-                                                                color: "#3b82f6",
-                                                            }}>
-                                                            <svg
-                                                                width="16"
-                                                                height="16"
-                                                                viewBox="0 0 24 24"
-                                                                fill="none"
-                                                                stroke="currentColor"
-                                                                strokeWidth="2">
-                                                                <path d="M9 11l3 3L22 4" />
-                                                                <path d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                                            </svg>
-                                                        </button>
+                                                       
                                                         <button
                                                             onClick={() =>
                                                                 handleDelete(
@@ -1684,6 +1893,10 @@ const getStatusStyle = (name) => {
             color: "#4b5563",
             textDecoration: "line-through",
         };
+    if (n.includes("material request"))
+        return { background: "#fef3c7", color: "#92400e" };
+    if (n.includes("material approved"))
+        return { background: "#dcfce7", color: "#166534" };
     if (n.includes("progress"))
         return { background: "#e0e7ff", color: "#3730a3" };
     if (n.includes("resolved"))
@@ -1696,10 +1909,13 @@ const styles = {
     pageContainer: {
         fontFamily:
             "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif",
-        backgroundColor: "#f3f4f6",
+        backgroundColor: "#e2e5ea",
         minHeight: "100vh",
         padding: "20px",
         color: "#111827",
+        width: "145%",
+        transform: "scale(0.70)",
+        transformOrigin: "top left",
     },
     headerSection: {
         display: "flex",
@@ -2084,6 +2300,7 @@ const styles = {
         display: "flex",
         gap: "8px",
     },
+    
     ticketSection: {
         padding: "20px 24px",
         borderBottom: "1px solid #f3f4f6",
@@ -2130,14 +2347,15 @@ const styles = {
         maxWidth: "100%",
         display: "block",
     },
+    
     modalOverlay: {
         position: "fixed",
-        top: 20,
+        top: 0,
         left: 0,
         right: 0,
         bottom: 0,
         backgroundColor: "rgba(0, 0, 0, 0.5)",
-        zIndex: 1000,
+        zIndex: 9999,
         display: "flex",
         justifyContent: "center",
         alignItems: "center",
@@ -2273,6 +2491,274 @@ const styles = {
         color: "#6b7280",
         fontSize: "16px",
     },
+        // --- Work Analysis Section Styles ---
+    analysisSection: {
+        padding: "24px 32px",
+        backgroundColor: "#f8fafc", // Subtle background for the whole section
+        borderTop: "1px solid #e2e8f0",
+    },
+    sectionHeader: {
+        display: "flex",
+        justifyContent: "space-between",
+        alignItems: "center",
+        marginBottom: "20px",
+    },
+    analysisCount: {
+        fontSize: "13px",
+        fontWeight: "600",
+        color: "#64748b",
+        background: "#e2e8f0",
+        padding: "2px 10px",
+        borderRadius: "12px",
+    },
+
+    // List & Cards
+    analysisList: {
+        display: "flex",
+        flexDirection: "column",
+        gap: "16px",
+    },
+    analysisCard: {
+        background: "white",
+        border: "1px solid #e2e8f0",
+        borderRadius: "12px",
+        padding: "20px",
+        display: "flex",
+        gap: "24px",
+        transition: "all 0.2s",
+        boxShadow: "0 1px 3px rgba(0,0,0,0.05)",
+    },
+    "analysisCard:hover": {
+        boxShadow: "0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)",
+        borderColor: "#cbd5e1",
+        transform: "translateY(-1px)",
+    },
+
+    // Left Column
+    analysisLeftCol: {
+        flex: 1,
+        display: "flex",
+        flexDirection: "column",
+        gap: "12px",
+    },
+    cardHeaderRow: {
+        display: "flex",
+        justifyContent: "space-between",
+        alignItems: "center",
+    },
+    cardIdBlock: {
+        display: "flex",
+        alignItems: "baseline",
+        gap: "6px",
+    },
+    idLabel: {
+        fontSize: "10px",
+        textTransform: "uppercase",
+        color: "#94a3b8",
+        fontWeight: "700",
+        letterSpacing: "0.5px",
+    },
+    idValue: {
+        fontFamily: "'JetBrains Mono', monospace",
+        fontSize: "13px",
+        fontWeight: "600",
+        color: "#334155",
+        background: "#f1f5f9",
+        padding: "2px 6px",
+        borderRadius: "4px",
+    },
+    dateText: {
+        fontSize: "12px",
+        color: "#64748b",
+        fontWeight: "500",
+    },
+    workerInfo: {
+        display: "flex",
+        alignItems: "center",
+        gap: "8px",
+        fontSize: "13px",
+        color: "#475569",
+        fontWeight: "500",
+    },
+    detailRow: {
+        display: "flex",
+        gap: "16px",
+        flexWrap: "wrap",
+    },
+    materialBadge: {
+        display: "inline-flex",
+        alignItems: "center",
+        gap: "6px",
+        padding: "4px 10px",
+        backgroundColor: "#eff6ff",
+        color: "#1e40af",
+        borderRadius: "6px",
+        fontSize: "12px",
+        fontWeight: "600",
+        border: "1px solid #dbeafe",
+    },
+    descriptionBlock: {
+        backgroundColor: "#f8fafc",
+        padding: "12px",
+        borderRadius: "8px",
+        border: "1px solid #f1f5f9",
+    },
+    descriptionText: {
+        margin: 0,
+        fontSize: "13px",
+        color: "#475569",
+        lineHeight: "1.5",
+        fontStyle: "italic",
+    },
+
+    // Approval Controls (Modern Toggle)
+    approvalControls: {
+        display: "flex",
+        flexDirection: "column",
+        gap: "8px",
+    },
+    approvalLabel: {
+        fontSize: "11px",
+        textTransform: "uppercase",
+        color: "#94a3b8",
+        fontWeight: "700",
+        letterSpacing: "0.5px",
+    },
+    toggleGroup: {
+        display: "flex",
+        background: "#f1f5f9",
+        padding: "4px",
+        borderRadius: "8px",
+        width: "fit-content",
+    },
+    toggleBtn: {
+        padding: "6px 16px",
+        borderRadius: "6px",
+        border: "none",
+        fontSize: "12px",
+        fontWeight: "600",
+        cursor: "pointer",
+        transition: "all 0.2s",
+    },
+    toggleBtnInactive: {
+        background: "transparent",
+        color: "#64748b",
+    },
+    toggleBtnActivePending: {
+        background: "white",
+        color: "#d97706", // Amber
+        boxShadow: "0 1px 2px rgba(0,0,0,0.1)",
+    },
+    toggleBtnActiveApproved: {
+        background: "white",
+        color: "#059669", // Green
+        boxShadow: "0 1px 2px rgba(0,0,0,0.1)",
+    },
+    approverInfo: {
+        display: "flex",
+        alignItems: "center",
+        gap: "6px",
+    },
+    approverLabel: {
+        color: "#94a3b8",
+        textTransform: "uppercase",
+        fontSize: "10px",
+        fontWeight: "700",
+    },
+    approverName: {
+        fontSize: "12px",
+        color: "#475569",
+        fontWeight: "500",
+    },
+
+    // Right Column (Media)
+    analysisRightCol: {
+        width: "160px",
+        display: "flex",
+        flexDirection: "column",
+        gap: "12px",
+        alignItems: "flex-end",
+    },
+    imageGrid: {
+        display: "grid",
+        gridTemplateColumns: "repeat(2, 1fr)",
+        gap: "6px",
+        width: "100%",
+    },
+    thumbImg: {
+        width: "100%",
+        aspectRatio: "1",
+        objectFit: "cover",
+        borderRadius: "6px",
+        border: "1px solid #e2e8f0",
+        cursor: "pointer",
+        transition: "transform 0.2s",
+    },
+    "thumbImg:hover": {
+        transform: "scale(1.05)",
+    },
+    moreImagesBadge: {
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        backgroundColor: "#1e293b",
+        color: "white",
+        fontSize: "11px",
+        fontWeight: "700",
+        borderRadius: "6px",
+        aspectRatio: "1",
+    },
+    noImages: {
+        width: "100%",
+        aspectRatio: "1.6",
+        border: "1px dashed #cbd5e1",
+        borderRadius: "8px",
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        justifyContent: "center",
+        gap: "6px",
+        color: "#94a3b8",
+        fontSize: "11px",
+    },
+    viewDetailsBtn: {
+        width: "100%",
+        padding: "8px 12px",
+        borderRadius: "6px",
+        border: "1px solid #cbd5e1",
+        background: "white",
+        color: "#475569",
+        fontSize: "12px",
+        fontWeight: "600",
+        cursor: "pointer",
+        textAlign: "center",
+        transition: "all 0.2s",
+    },
+    "viewDetailsBtn:hover": {
+        background: "#f8fafc",
+        borderColor: "#94a3b8",
+    },
+
+    // Loading & Empty States
+    loadingWrapper: {
+        padding: "20px",
+        textAlign: "center",
+    },
+    loadingText: {
+        color: "#64748b",
+        fontStyle: "italic",
+        fontSize: "14px",
+    },
+    emptyAnalysisState: {
+        padding: "40px 20px",
+        textAlign: "center",
+        border: "1px dashed #cbd5e1",
+        borderRadius: "12px",
+        background: "#f8fafc",
+    },
+    emptyIcon: { fontSize: "24px", marginBottom: "12px" },
+    emptyText: { margin: 0, color: "#94a3b8", fontSize: "14px" },
+    
 };
 
 const styleSheet = document.createElement("style");

@@ -22,7 +22,8 @@ const TicketRoutes = {
     MAIN_PAGE: "/",
     TICKET_PAGE: "/ticket/ticket",
     CREATE_TICKET_PAGE: "/ticket/create-ticket",
-    WORK_PAGE: "/ticket/work",
+    WORK_PAGE: "/ticket/worker",
+    MATERIAL_APPROVED_PAGE: "/ticket/material-approved",
 };
 
 const AppsRoutes = {

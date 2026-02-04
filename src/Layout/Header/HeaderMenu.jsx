@@ -63,7 +63,7 @@ const HeaderMenu = () => {
     return (
         <>
             <ul className="d-flex align-items-center">
-                <li className="header-cloud">
+                {/* <li className="header-cloud">
                     <a
                         href="#"
                         className="head-icon"
@@ -645,7 +645,7 @@ const HeaderMenu = () => {
                             </div>
                         </div>
                     </div>
-                </li>
+                </li> */}
 
                 <li className="header-profile">
                     <a
@@ -690,145 +690,145 @@ const HeaderMenu = () => {
                                 </li>
 
                                 <li className="app-divider-v dotted my-1"></li>
-                                <li>
-                                    <Link
-                                        className="f-w-500"
-                                        href="/apps/profile-page/profile">
-                                        <i className="ph-duotone  ph-user-circle pe-1 f-s-20"></i>
-                                        Profile Detaiils
-                                    </Link>
-                                </li>
-                                <li>
-                                    <Link
-                                        className="f-w-500"
-                                        href="/apps/profile-page/setting">
-                                        <i className="ph-duotone  ph-gear pe-1 f-s-20"></i>{" "}
-                                        Settings
-                                    </Link>
-                                </li>
-                                <li>
-                                    <div className="app-dropdown dropstart">
+                                    {/* <li>
                                         <Link
                                             className="f-w-500"
-                                            role="button"
-                                            href="/apps/profile-page/setting"
-                                            data-bs-toggle="dropdown"
-                                            aria-expanded="false">
-                                            <i className="ph-duotone  ph-eye-slash pe-1 f-s-20"></i>
-                                            Hide Settings
+                                            href="/apps/profile-page/profile">
+                                            <i className="ph-duotone  ph-user-circle pe-1 f-s-20"></i>
+                                            Profile Detaiils
                                         </Link>
-                                        <ul className="dropdown-menu">
-                                            <li>
-                                                <a className="dropdown-item">
-                                                    Hide Comments
-                                                </a>
-                                            </li>
-                                            <li>
-                                                <a className="dropdown-item">
-                                                    Advanced comment filtering
-                                                </a>
-                                            </li>
-                                            <li>
-                                                <a className="dropdown-item">
-                                                    Hide mssage request
-                                                </a>
-                                            </li>
-                                            <li>
-                                                <hr className="dropdown-divider" />
-                                            </li>
-                                            <li>
-                                                <a className="dropdown-item">
-                                                    Separated link
-                                                </a>
-                                            </li>
-                                        </ul>
-                                    </div>
-                                </li>
-                                <li>
-                                    <div className="d-flex align-items-center justify-content-between">
-                                        <a className="f-w-500" href="#">
-                                            <i className="ph-duotone  ph-notification pe-1 f-s-20"></i>
-                                            Notification
-                                        </a>
-                                        <div className="flex-shrink-0">
-                                            <div className="form-check form-switch">
-                                                <input
-                                                    className="form-check-input form-check-primary"
-                                                    type="checkbox"
-                                                    id="basicSwitch"
-                                                    defaultChecked
-                                                />
-                                            </div>
+                                    </li>
+                                    <li>
+                                        <Link
+                                            className="f-w-500"
+                                            href="/apps/profile-page/setting">
+                                            <i className="ph-duotone  ph-gear pe-1 f-s-20"></i>{" "}
+                                            Settings
+                                        </Link>
+                                    </li>
+                                    <li>
+                                        <div className="app-dropdown dropstart">
+                                            <Link
+                                                className="f-w-500"
+                                                role="button"
+                                                href="/apps/profile-page/setting"
+                                                data-bs-toggle="dropdown"
+                                                aria-expanded="false">
+                                                <i className="ph-duotone  ph-eye-slash pe-1 f-s-20"></i>
+                                                Hide Settings
+                                            </Link>
+                                            <ul className="dropdown-menu">
+                                                <li>
+                                                    <a className="dropdown-item">
+                                                        Hide Comments
+                                                    </a>
+                                                </li>
+                                                <li>
+                                                    <a className="dropdown-item">
+                                                        Advanced comment filtering
+                                                    </a>
+                                                </li>
+                                                <li>
+                                                    <a className="dropdown-item">
+                                                        Hide mssage request
+                                                    </a>
+                                                </li>
+                                                <li>
+                                                    <hr className="dropdown-divider" />
+                                                </li>
+                                                <li>
+                                                    <a className="dropdown-item">
+                                                        Separated link
+                                                    </a>
+                                                </li>
+                                            </ul>
                                         </div>
-                                    </div>
-                                </li>
-                                <li>
-                                    <div className="d-flex align-items-center justify-content-between">
-                                        <div>
+                                    </li>
+                                    <li>
+                                        <div className="d-flex align-items-center justify-content-between">
                                             <a className="f-w-500" href="#">
-                                                <i className="ph-duotone  ph-detective pe-1 f-s-20"></i>
-                                                Incognito
+                                                <i className="ph-duotone  ph-notification pe-1 f-s-20"></i>
+                                                Notification
                                             </a>
-                                        </div>
-                                        <div className="flex-shrink-0">
-                                            <div className="form-check form-switch">
-                                                <input
-                                                    className="form-check-input form-check-primary"
-                                                    type="checkbox"
-                                                    id="incognitoSwitch"
-                                                />
-                                            </div>
-                                        </div>
-                                    </div>
-                                </li>
-                                <li className="app-divider-v dotted my-1"></li>
-                                <li>
-                                    <Link className="f-w-500" href="/apps/faq">
-                                        <i className="ph-duotone  ph-question pe-1 f-s-20"></i>{" "}
-                                        Help
-                                    </Link>
-                                </li>
-                                <li>
-                                    <Link
-                                        className="f-w-500"
-                                        href="/apps/pricing">
-                                        <i className="ph-duotone  ph-currency-circle-dollar pe-1 f-s-20"></i>
-                                        Pricing
-                                    </Link>
-                                </li>
-                                <li>
-                                    <Link
-                                        className="mb-0 text-secondary f-w-500"
-                                        href="/admin-pages/auth_pages/sign_up">
-                                        <i className="ph-bold  ph-plus pe-1 f-s-20"></i>{" "}
-                                        Add account
-                                    </Link>
-                                </li>
-                                <li className="app-divider-v dotted my-1"></li>
-                                <li>
-                                    <Card className="card-light-primary upgrade-plan">
-                                        <CardBody>
-                                            <div className="text-center">
-                                                <div>
-                                                    <h6 className="mb-0 text-dark f-w-600">
-                                                        Free Plan
-                                                    </h6>
-                                                    <p className="text-dark mb-0">
-                                                        20k views
-                                                    </p>
-                                                </div>
-                                                <div className="flex-shrink-0 mt-3">
-                                                    <button
-                                                        type="button"
-                                                        className="btn btn-dark text-white">
-                                                        Upgrade
-                                                    </button>
+                                            <div className="flex-shrink-0">
+                                                <div className="form-check form-switch">
+                                                    <input
+                                                        className="form-check-input form-check-primary"
+                                                        type="checkbox"
+                                                        id="basicSwitch"
+                                                        defaultChecked
+                                                    />
                                                 </div>
                                             </div>
-                                        </CardBody>
-                                    </Card>
-                                </li>
-                                <li className="app-divider-v dotted my-1"></li>
+                                        </div>
+                                    </li>
+                                    <li>
+                                        <div className="d-flex align-items-center justify-content-between">
+                                            <div>
+                                                <a className="f-w-500" href="#">
+                                                    <i className="ph-duotone  ph-detective pe-1 f-s-20"></i>
+                                                    Incognito
+                                                </a>
+                                            </div>
+                                            <div className="flex-shrink-0">
+                                                <div className="form-check form-switch">
+                                                    <input
+                                                        className="form-check-input form-check-primary"
+                                                        type="checkbox"
+                                                        id="incognitoSwitch"
+                                                    />
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </li>
+                                    <li className="app-divider-v dotted my-1"></li>
+                                    <li>
+                                        <Link className="f-w-500" href="/apps/faq">
+                                            <i className="ph-duotone  ph-question pe-1 f-s-20"></i>{" "}
+                                            Help
+                                        </Link>
+                                    </li>
+                                    <li>
+                                        <Link
+                                            className="f-w-500"
+                                            href="/apps/pricing">
+                                            <i className="ph-duotone  ph-currency-circle-dollar pe-1 f-s-20"></i>
+                                            Pricing
+                                        </Link>
+                                    </li>
+                                    <li>
+                                        <Link
+                                            className="mb-0 text-secondary f-w-500"
+                                            href="/admin-pages/auth_pages/sign_up">
+                                            <i className="ph-bold  ph-plus pe-1 f-s-20"></i>{" "}
+                                            Add account
+                                        </Link>
+                                    </li>
+                                    <li className="app-divider-v dotted my-1"></li>
+                                    <li>
+                                        <Card className="card-light-primary upgrade-plan">
+                                            <CardBody>
+                                                <div className="text-center">
+                                                    <div>
+                                                        <h6 className="mb-0 text-dark f-w-600">
+                                                            Free Plan
+                                                        </h6>
+                                                        <p className="text-dark mb-0">
+                                                            20k views
+                                                        </p>
+                                                    </div>
+                                                    <div className="flex-shrink-0 mt-3">
+                                                        <button
+                                                            type="button"
+                                                            className="btn btn-dark text-white">
+                                                            Upgrade
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            </CardBody>
+                                        </Card>
+                                    </li>
+                                    <li className="app-divider-v dotted my-1"></li> */}
 
                                 <li>
                                     <a

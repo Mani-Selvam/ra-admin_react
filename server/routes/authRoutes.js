@@ -12,6 +12,8 @@ router.post("/login", async (req, res) => {
     const { mobile, password } = req.body;
 
     console.log("Login attempt with mobile:", mobile);
+    console.log("Password received length:", password ? password.length : 0);
+    console.log("Password received:", password ? `"${password}"` : "null");
 
     try {
         // Validate input
@@ -30,9 +32,13 @@ router.post("/login", async (req, res) => {
         }
 
         console.log("User found:", user.name);
+        console.log("Password in DB:", user.password ? "exists (hashed)" : "missing");
+        console.log("Hashed password length:", user.password ? user.password.length : 0);
 
         // 2. Check if password is correct
+        console.log("Attempting bcrypt comparison...");
         const isMatch = await user.comparePassword(password);
+        console.log("Password comparison result:", isMatch);
         if (!isMatch) {
             console.log("Password mismatch for user:", mobile);
             return res.status(400).json({ message: "Invalid Credentials" });

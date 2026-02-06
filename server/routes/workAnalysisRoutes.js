@@ -35,26 +35,35 @@ router.get("/worker", auth, async (req, res) => {
 });
 
 // @route   GET /api/work-analysis/approved
-// @desc    Get Only Material Approved Work Analysis (material_required === "No")
+// @desc    Get Material Approved Work Analysis (where ticket status is "Material Approved")
 // @Access  Private
 router.get("/approved", auth, async (req, res) => {
     try {
-        console.log("🟢 Fetching ONLY Material Approved work analyses (material_required = 'No')");
+        console.log("🟢 Fetching Material Approved work analyses (ticket status = 'Material Approved')");
 
         // Import models
         const WorkAnalysis = (await import("../models/WorkAnalysis.js")).default;
         const User = (await import("../models/User.js")).default;
+        const Ticket = (await import("../models/Ticket.js")).default;
         
-        // First check total records in the database
-        const totalRecords = await WorkAnalysis.countDocuments();
-        console.log(`📊 Total WorkAnalysis records in DB: ${totalRecords}`);
+        // First, find all tickets with "Material Approved" status
+        const materialApprovedStatus = await (await import("../models/TicketStatus.js")).default.findOne({ 
+            name: { $regex: "Material Approved", $options: "i" } 
+        });
         
-        // Check all material_required values in the database
-        const allMaterialValues = await WorkAnalysis.find().distinct("material_required");
-        console.log(`📊 Distinct material_required values in DB:`, allMaterialValues);
+        console.log(`📊 Material Approved Status:`, materialApprovedStatus);
         
-        // Find work analyses where material_required is "No" (Material Approved)
-        let analyses = await WorkAnalysis.find({ material_required: "No" })
+        // Find tickets with Material Approved status
+        const materialApprovedTickets = materialApprovedStatus 
+            ? await Ticket.find({ status_id: materialApprovedStatus._id }).select("_id")
+            : [];
+        
+        console.log(`📊 Found ${materialApprovedTickets.length} tickets with Material Approved status`);
+        
+        const ticketIds = materialApprovedTickets.map(t => t._id);
+        
+        // Find work analyses for these tickets
+        let analyses = await WorkAnalysis.find({ ticket_id: { $in: ticketIds } })
             .populate({
                 path: "ticket_id",
                 select: "ticket_id title status_id",
@@ -146,5 +155,35 @@ router.get("/", auth, getWorkAnalysis);
 // @desc    Update Approval Status (Manager Action)
 // @Access  Private
 router.put("/:id/approve", auth, updateApproval);
+
+// @route   PUT /api/work-analysis/:id
+// @desc    Update Work Analysis (e.g., material_required status)
+// @Access  Private
+router.put("/:id", auth, async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { material_required } = req.body;
+
+        // Import WorkAnalysis model
+        const WorkAnalysis = (await import("../models/WorkAnalysis.js")).default;
+
+        // Find and update the work analysis
+        const analysis = await WorkAnalysis.findByIdAndUpdate(
+            id,
+            { material_required },
+            { new: true, runValidators: true }
+        );
+
+        if (!analysis) {
+            return res.status(404).json({ message: "Work analysis not found" });
+        }
+
+        console.log(`✅ Updated work analysis ${id}: material_required = ${material_required}`);
+        res.json(analysis);
+    } catch (error) {
+        console.error("Error updating work analysis:", error);
+        res.status(500).json({ message: error.message });
+    }
+});
 
 export default router;

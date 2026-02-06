@@ -1,6 +1,7 @@
 import axios from "axios";
+import API_ENDPOINTS from "../../../config/apiConfig";
 
-const API_URL = "http://localhost:5000/api/users"; // Adjust port if needed
+const API_URL = `${API_ENDPOINTS.BASE_URL}/api/users`; // Adjust port if needed
 
 const getJSONHeader = () => {
     const token = localStorage.getItem("token");

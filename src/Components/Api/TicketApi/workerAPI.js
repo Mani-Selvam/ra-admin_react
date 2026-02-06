@@ -1,6 +1,8 @@
 // Worker API - Get tickets assigned only to the logged-in worker
 
-const API_BASE_URL = "http://localhost:5000/api";
+import API_ENDPOINTS from "../../../config/apiConfig";
+
+const API_BASE_URL = `${API_ENDPOINTS.BASE_URL}/api`;
 
 /**
  * Get tickets assigned to the current logged-in worker only

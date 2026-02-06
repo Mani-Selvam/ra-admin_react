@@ -2,8 +2,9 @@ import React, { useEffect, useState } from "react";
 import {
     getWorkerAssignedTickets,
     getWorkerWorkAnalysis,
-} from "./workerApi";
+} from "@/Components/Api/TicketApi/workerAPI";
 import WorkAnalysisForm from "./WorkAnalysisForm";
+import API_ENDPOINTS from "@/config/apiConfig";
 import "./ticketForm.css";
 
 // --- SVG Icons ---
@@ -121,6 +122,7 @@ const WorkerAnalysisPage = () => {
     const [selectedTicketForAnalysis, setSelectedTicketForAnalysis] = useState(null);
     const [selectedAnalysisToView, setSelectedAnalysisToView] = useState(null);
     const [editingInitialData, setEditingInitialData] = useState(null);
+    const [formDataDraft, setFormDataDraft] = useState(null);
     const [toast, setToast] = useState({
         show: false,
         message: "",
@@ -202,7 +204,18 @@ const WorkerAnalysisPage = () => {
     const fetchWorkAnalyses = async () => {
         try {
             const data = await getWorkerWorkAnalysis();
-            setWorkAnalyses(Array.isArray(data) ? data : data.data || []);
+            const allAnalyses = Array.isArray(data) ? data : data.data || [];
+            
+            // Filter to show ONLY records with:
+            // 1. Material Required = "Yes"
+            // 2. Approval Status = "Approved" (Material Approved)
+            const filteredAnalyses = allAnalyses.filter((analysis) => {
+                const hasMaterial = String(analysis.material_required).toLowerCase() === "yes";
+                const isApproved = String(analysis.approval_status).toLowerCase() === "approved";
+                return hasMaterial && isApproved;
+            });
+            
+            setWorkAnalyses(filteredAnalyses);
         } catch (error) {
             console.error("Error fetching work analyses:", error);
         }
@@ -214,6 +227,21 @@ const WorkerAnalysisPage = () => {
             fetchWorkAnalyses();
         }
     }, [workerId]);
+
+    // Load draft form data when modal opens for a specific ticket
+    useEffect(() => {
+        if (showWorkAnalysisModal && selectedTicketForAnalysis && !editingInitialData) {
+            const draftKey = `work_analysis_draft_${selectedTicketForAnalysis._id}`;
+            const savedDraft = localStorage.getItem(draftKey);
+            if (savedDraft) {
+                try {
+                    setFormDataDraft(JSON.parse(savedDraft));
+                } catch (e) {
+                    console.warn("Failed to restore draft:", e);
+                }
+            }
+        }
+    }, [showWorkAnalysisModal, selectedTicketForAnalysis?._id, editingInitialData]);
 
     // --- Handlers ---
 
@@ -238,8 +266,9 @@ const WorkerAnalysisPage = () => {
         const term = searchTerm.toLowerCase();
         const id = String(ticket.ticket_id || "").toLowerCase();
         const title = String(ticket.title || "").toLowerCase();
+        const location = String(ticket.location || "").toLowerCase();
         const desc = String(ticket.description || "").toLowerCase();
-        return id.includes(term) || title.includes(term) || desc.includes(term);
+        return id.includes(term) || title.includes(term) || location.includes(term) || desc.includes(term);
     });
 
     if (loading) {
@@ -309,6 +338,10 @@ const WorkerAnalysisPage = () => {
                                             <p style={styles.infoValue}>{viewTicket.title}</p>
                                         </div>
                                         <div style={styles.infoItem}>
+                                            <h5 style={styles.infoLabel}>Location</h5>
+                                            <p style={styles.infoValue}>{viewTicket.location || "-"}</p>
+                                        </div>
+                                        <div style={styles.infoItem}>
                                             <h5 style={styles.infoLabel}>Description</h5>
                                             <p style={styles.infoValue}>{viewTicket.description}</p>
                                         </div>
@@ -341,7 +374,7 @@ const WorkerAnalysisPage = () => {
                                     <div style={styles.ticketSection}>
                                         <h4 style={styles.sectionTitle}>Attachment</h4>
                                         <div style={styles.imageContainer}>
-                                            <img src={`http://localhost:5000/${viewTicket.image}`} alt="ticket attachment" style={styles.detailImage} />
+                                            <img src={`${API_ENDPOINTS.BASE_URL}/${viewTicket.image}`} alt="ticket attachment" style={styles.detailImage} />
                                         </div>
                                     </div>
                                 )}
@@ -366,14 +399,25 @@ const WorkerAnalysisPage = () => {
                                 ticketId={selectedTicketForAnalysis._id}
                                 ticketTitle={selectedTicketForAnalysis.title}
                                 onSuccess={() => {
+                                    // Clear the saved draft after successful submission
+                                    const draftKey = `work_analysis_draft_${selectedTicketForAnalysis._id}`;
+                                    localStorage.removeItem(draftKey);
+                                    
                                     setShowWorkAnalysisModal(false);
                                     setSelectedTicketForAnalysis(null);
                                     setEditingInitialData(null);
+                                    setFormDataDraft(null);
                                     fetchTickets();
                                     fetchWorkAnalyses();
                                     showToast("Work Analysis submitted successfully!", "success");
                                 }}
                                 initialData={editingInitialData}
+                                draftData={formDataDraft}
+                                onFormChange={(data) => {
+                                    // Auto-save form changes to localStorage
+                                    const draftKey = `work_analysis_draft_${selectedTicketForAnalysis._id}`;
+                                    localStorage.setItem(draftKey, JSON.stringify(data));
+                                }}
                             />
                         </div>
                     </div>
@@ -475,7 +519,7 @@ const WorkerAnalysisPage = () => {
                                     <div style={{ display: "flex", gap: "12px", marginTop: "12px", flexWrap: "wrap" }}>
                                         {selectedAnalysisToView.uploaded_images.map((img, i) => {
                                             const normalized = img && typeof img === "string" ? img.replace(/\\/g, "/") : img;
-                                            const src = normalized && normalized.startsWith("http") ? normalized : `http://localhost:5000/${normalized}`;
+                                            const src = normalized && normalized.startsWith("http") ? normalized : `${API_ENDPOINTS.BASE_URL}/${normalized}`;
                                             return (
                                                 <img 
                                                     key={i} 
@@ -566,7 +610,7 @@ const WorkerAnalysisPage = () => {
                     <span style={styles.searchIcon}><SearchIcon /></span>
                     <input
                         type="text"
-                        placeholder="Search tickets by ID, title, or description..."
+                        placeholder="Search"
                         value={searchTerm}
                         onChange={(e) => setSearchTerm(e.target.value)}
                         style={styles.searchInput}
@@ -655,7 +699,7 @@ const WorkerAnalysisPage = () => {
 
                                         {ticket.image && (
                                             <div style={styles.imageThumbnailWrapper}>
-                                                <img src={`http://localhost:5000/${ticket.image}`} alt="Attachment" style={styles.cardImage} />
+                                                <img src={`${API_ENDPOINTS.BASE_URL}/${ticket.image}`} alt="Attachment" style={styles.cardImage} />
                                             </div>
                                         )}
 

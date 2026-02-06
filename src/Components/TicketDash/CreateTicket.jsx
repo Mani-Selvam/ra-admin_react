@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from "react";
-import { createTicket } from "./ticketAPI";
-import { updateTicket } from "./ticketAPI";
+import { createTicket } from "@/Components/Api/TicketApi/ticketAPI";
+import { updateTicket } from "@/Components/Api/TicketApi/ticketAPI";
 import { useAuth } from "../Login/AuthContext";
+import API_ENDPOINTS from "../../config/apiConfig";
 import "./ticketForm.css";
 
 const CreateTicket = ({
@@ -18,6 +19,7 @@ const CreateTicket = ({
         description: "",
         priority_id: "",
         status_id: "raised", // Default status is "Raised"
+        location: "",
         image: null,
     });
 
@@ -40,6 +42,7 @@ const CreateTicket = ({
                     "",
                 status_id:
                     initialData.status_id?._id || initialData.status_id || "",
+                location: initialData.location || "",
                 image: null, // image editing not supported in this modal
             }));
         }
@@ -68,7 +71,7 @@ const CreateTicket = ({
 
     const fetchCompanies = async () => {
         try {
-            const response = await fetch("http://localhost:5000/api/companies");
+            const response = await fetch(API_ENDPOINTS.COMPANIES);
             const data = await response.json();
             setCompanies(data);
         } catch (error) {
@@ -80,9 +83,7 @@ const CreateTicket = ({
 
     const fetchDepartments = async () => {
         try {
-            const response = await fetch(
-                "http://localhost:5000/api/departments",
-            );
+            const response = await fetch(API_ENDPOINTS.DEPARTMENTS);
             const data = await response.json();
             setDepartments(data);
         } catch (error) {
@@ -94,7 +95,7 @@ const CreateTicket = ({
 
     const fetchPriorities = async () => {
         try {
-            const res = await fetch("http://localhost:5000/api/priorities");
+            const res = await fetch(API_ENDPOINTS.PRIORITIES);
             const data = await res.json();
             setPriorities(data || []);
         } catch (err) {
@@ -106,7 +107,7 @@ const CreateTicket = ({
 
     const fetchTicketStatuses = async () => {
         try {
-            const res = await fetch("http://localhost:5000/api/ticket-status");
+            const res = await fetch(API_ENDPOINTS.TICKET_STATUSES);
             const data = await res.json();
             setTicketStatuses(data || []);
         } catch (err) {
@@ -152,6 +153,7 @@ const CreateTicket = ({
             dataToSend.append("title", formData.title);
             dataToSend.append("description", formData.description);
             dataToSend.append("priority_id", formData.priority_id);
+            dataToSend.append("location", formData.location);
             // Map display status (e.g., "raised") to actual status ObjectId if available
             let statusToSend = formData.status_id;
             try {
@@ -179,11 +181,32 @@ const CreateTicket = ({
                 title: formData.title,
                 description: formData.description,
                 priority_id: formData.priority_id,
+                location: formData.location,
                 status_id: formData.status_id,
                 raised_by: userId,
             });
 
             if (isEdit) {
+                // Check if user is trying to close the ticket
+                const selectedStatus = ticketStatuses.find(
+                    (s) => String(s._id || s.id) === String(formData.status_id)
+                );
+                const isClosingTicket = selectedStatus && String(selectedStatus.name).toLowerCase() === "closed";
+                
+                if (isClosingTicket) {
+                    // Get current user from localStorage
+                    const currentUser = JSON.parse(localStorage.getItem("user") || "{}");
+                    const currentUserId = currentUser.id || currentUser._id;
+                    const raisedByUserId = initialData.raised_by?._id || initialData.raised_by;
+                    
+                    // Only the person who raised the ticket can close it
+                    if (String(currentUserId) !== String(raisedByUserId)) {
+                        setError("Only the person who raised this ticket can close it");
+                        setLoading(false);
+                        return;
+                    }
+                }
+                
                 // For edit, call update API with JSON (image upload not supported in edit modal)
                 const updatePayload = {
                     company_id: formData.company_id || undefined,
@@ -192,11 +215,37 @@ const CreateTicket = ({
                     description: formData.description || undefined,
                     priority_id: formData.priority_id || undefined,
                     status_id: formData.status_id || undefined,
+                    location: formData.location || undefined,
                 };
+                
+                // If closing ticket, add closed_at timestamp
+                if (isClosingTicket) {
+                    updatePayload.closed_at = new Date().toISOString();
+                }
 
                 await updateTicket(initialData._id, updatePayload);
-                setSuccessMessage("Ticket updated successfully!");
-                if (onTicketUpdated) onTicketUpdated();
+                
+                // Dynamic success message based on status
+                let successMsg = "Ticket updated successfully!";
+                if (selectedStatus) {
+                    const statusName = String(selectedStatus.name).toLowerCase();
+                    
+                    // Custom messages for each status
+                    const statusMessages = {
+                        "closed": "🔒 Ticket closed successfully!",
+                        "material approved": "✅ Material approved successfully!",
+                        "material request": "📋 Material request updated successfully!",
+                        "working in progress": "⏳ Ticket marked as working in progress!",
+                        "work completed": "✔️ Work completed successfully!",
+                        "raised": "🚀 Ticket raised successfully!",
+                        "approved": "✅ Ticket approved successfully!",
+                    };
+                    
+                    successMsg = statusMessages[statusName] || `✓ Ticket status changed to ${selectedStatus.name} successfully!`;
+                }
+                
+                setSuccessMessage(successMsg);
+                if (onTicketUpdated) onTicketUpdated(selectedStatus?.name);
                 // Auto dismiss
                 setTimeout(() => setSuccessMessage(""), 3000);
             } else {
@@ -205,6 +254,26 @@ const CreateTicket = ({
                 }
 
                 await createTicket(dataToSend);
+                
+                // Get status name BEFORE resetting the form
+                let statusNameForCallback = "Raised"; // Default
+                
+                try {
+                    // Find the selected status from ticketStatuses array
+                    if (formData.status_id && ticketStatuses && ticketStatuses.length > 0) {
+                        const found = ticketStatuses.find(
+                            s => String(s._id || s.id) === String(formData.status_id)
+                        );
+                        if (found && found.name) {
+                            statusNameForCallback = found.name;
+                        }
+                    }
+                } catch (err) {
+                    console.warn("Error finding status name:", err);
+                }
+                
+                console.log("✅ Ticket created with status:", statusNameForCallback);
+                
                 setSuccessMessage("Ticket created successfully!");
                 // Reset form
                 setFormData({
@@ -214,11 +283,15 @@ const CreateTicket = ({
                     description: "",
                     priority_id: "",
                     status: "",
+                    location: "",
                     image: null,
                 });
                 setPreview(null);
 
-                if (onTicketCreated) onTicketCreated(); // Refresh list if parent exists
+                // Pass status info to parent component for dynamic success message
+                if (onTicketCreated) {
+                    onTicketCreated(statusNameForCallback);
+                }
                 // Auto dismiss success message
                 setTimeout(() => setSuccessMessage(""), 3000);
             }
@@ -298,7 +371,16 @@ const CreateTicket = ({
                             </select>
                         </div>
                     </div>
-
+                    <div className="form-group">
+                        <label>Location</label>
+                        <input
+                            type="text"
+                            name="location"
+                            value={formData.location}
+                            onChange={handleChange}
+                            placeholder="Enter location (e.g., Building A, Room 101)"
+                        />
+                    </div>
                     <div className="form-group">
                         <label>Title</label>
                         <input
@@ -321,6 +403,8 @@ const CreateTicket = ({
                             rows="4"
                             required></textarea>
                     </div>
+
+                  
 
                     <div className="form-row">
                         <div className="form-group">
@@ -373,11 +457,31 @@ const CreateTicket = ({
                                                 String(formData.company_id)
                                             );
                                         })
-                                        .map((s) => (
-                                            <option key={s._id} value={s._id}>
-                                                {s.name}
-                                            </option>
-                                        ))}
+                                        .map((s) => {
+                                            // Check if this is the "Closed" status
+                                            const isClosedStatus = String(s.name).toLowerCase() === "closed";
+                                            
+                                            // Check if current user can close (must be ticket raiser)
+                                            let canSelectClosed = true;
+                                            if (isClosedStatus && initialData) {
+                                                const currentUser = JSON.parse(localStorage.getItem("user") || "{}");
+                                                const currentUserId = currentUser.id || currentUser._id;
+                                                const raisedByUserId = initialData.raised_by?._id || initialData.raised_by;
+                                                canSelectClosed = String(currentUserId) === String(raisedByUserId);
+                                            }
+                                            
+                                            return (
+                                                <option 
+                                                    key={s._id} 
+                                                    value={s._id}
+                                                    disabled={isClosedStatus && !canSelectClosed}
+                                                    title={isClosedStatus && !canSelectClosed ? "Only the person who raised this ticket can close it" : ""}
+                                                >
+                                                    {s.name}
+                                                    {isClosedStatus && !canSelectClosed ? " (Not available)" : ""}
+                                                </option>
+                                            );
+                                        })}
                                 </select>
                             ) : (
                                 <input

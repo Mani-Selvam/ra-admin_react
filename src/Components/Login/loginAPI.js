@@ -1,4 +1,7 @@
-const API_BASE_URL = "http://localhost:5000/api";
+import API_ENDPOINTS from "@/config/apiConfig";
+
+// API base URL (from centralized config)
+const API_BASE_URL = `${API_ENDPOINTS.BASE_URL}/api`;
 
 export const loginUser = async (mobile, password) => {
     try {

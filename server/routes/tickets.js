@@ -207,6 +207,7 @@ router.post("/", upload.single("image"), async (req, res) => {
             company_id,
             department_id,
             raised_by,
+            location,
         } = req.body;
 
         // Validate required fields
@@ -231,6 +232,7 @@ router.post("/", upload.single("image"), async (req, res) => {
             company_id,
             department_id,
             raised_by,
+            location,
         });
 
         const imagePath = req.file ? req.file.path.replace(/\\/g, "/") : null;
@@ -244,6 +246,7 @@ router.post("/", upload.single("image"), async (req, res) => {
             department_id,
             raised_by,
             image: imagePath,
+            location: location || null,
         });
 
         const savedTicket = await newTicket.save();
@@ -276,6 +279,8 @@ router.put("/:id", async (req, res) => {
             assigned_to,
             approver_id,
             approved_at,
+            closed_at,
+            location,
         } = req.body;
 
         // If status_id is provided, fetch the status name and update both status_id and status
@@ -290,6 +295,8 @@ router.put("/:id", async (req, res) => {
             ...(assigned_to && { assigned_to }),
             ...(approver_id && { approver_id }),
             ...(approved_at && { approved_at }),
+            ...(closed_at !== undefined && { closed_at: closed_at ? new Date(closed_at) : null }),
+            ...(location !== undefined && { location: location || null }),
         };
 
         // If status_id is provided but status string is not, fetch the status name from the database

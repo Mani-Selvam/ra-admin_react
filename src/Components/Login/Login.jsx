@@ -31,12 +31,12 @@ const Login = () => {
                 localStorage.setItem("user", JSON.stringify(response.user));
 
                 console.log(
-                    "Token and user stored, refreshing page to update auth state...",
+                    "Token and user stored, redirecting to dashboard...",
                 );
-                // Redirect to company master page after successful login
+                // Redirect to dashboard after successful login with delay for auth context to update
                 setTimeout(() => {
-                    window.location.href = "/master/company";
-                }, 500);
+                    window.location.href = "/";
+                }, 300);
             } else {
                 console.log("No token in response");
                 setError("Login failed. Please try again.");

@@ -4,7 +4,7 @@ import {
     createCompany,
     updateCompany,
     deleteCompany,
-} from "./api";
+} from "@/Components/Api/MasterApi/api";
 
 // --- ICONS (SVG Components) ---
 const PlusIcon = () => (
@@ -539,7 +539,7 @@ const CompanyMaster = () => {
                                         className="responsive-hide-mobile">
                                         Website
                                     </th>
-                                    <th style={styles.thAction}>Actions</th>
+                                    <th style={styles.thAction}>ACTIONS</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -573,7 +573,7 @@ const CompanyMaster = () => {
                                                 </span>
                                             </td>
                                             <td style={styles.td}>
-                                                <strong>{c.name}</strong>
+                                                <span>{c.name}</span>
                                             </td>
                                             <td style={styles.td}>
                                                 <div style={styles.contactInfo}>
@@ -613,7 +613,7 @@ const CompanyMaster = () => {
                                             </td>
                                             <td style={styles.tdAction}>
                                                 <button
-                                                    style={styles.actionBtn}
+                                                    style={styles.actionBtnView}
                                                     onClick={() =>
                                                         handleView(c)
                                                     }>
@@ -810,26 +810,26 @@ const styles = {
         textAlign: "left",
         padding: "12px 16px",
         backgroundColor: "#f9fafb",
-        color: "#6b7280",
+        color: "#000000",
         fontSize: "12px",
         textTransform: "uppercase",
         letterSpacing: "0.05em",
-        fontWeight: "600",
+        fontWeight: "700",
         whiteSpace: "nowrap",
     },
-    thAction: { textAlign: "right", padding:"12px" },
+    thAction: { textAlign: "right", padding:"20px" },
     tr: { borderBottom: "1px solid #f3f4f6" },
     td: {
         padding: "12px 16px",
-        color: "#374151",
+        color: "#525252",
         fontSize: "14px",
         verticalAlign: "middle",
         whiteSpace: "nowrap",
     },
     tdAction: { textAlign: "right", whiteSpace: "nowrap" , padding:"12px"}, 
     actionBtn: {
-        background: "#e0e7ff",
-        color: "#3730a3",
+        background: "#d017d6",
+        color: "#e4e4e4",
         border: "none",
         borderRadius: "6px",
         width: "32px",
@@ -842,8 +842,20 @@ const styles = {
         margin:"5px",
     },
     actionBtnDelete: {
-        background: "#fee2e2",
-        color: "#991b1b",
+        background: "#ef1414",
+        color: "#ffffff",
+        border: "none",
+        borderRadius: "6px",
+        width: "32px",
+        height: "32px",
+        display: "inline-flex",
+        justifyContent: "center",
+        alignItems: "center",
+        cursor: "pointer",
+    },
+    actionBtnView: {
+        background: "#7379c9",
+        color: "#ffffff",
         border: "none",
         borderRadius: "6px",
         width: "32px",

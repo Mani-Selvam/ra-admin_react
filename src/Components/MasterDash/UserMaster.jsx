@@ -6,7 +6,7 @@ import {
     updateUser,
     deleteUser,
     getUserById,
-} from "./userApi";
+} from "@/Components/Api/MasterApi/userApi";
 
 // --- ICONS ---
 const PlusIcon = () => (
@@ -735,7 +735,7 @@ const UserMaster = () => {
                                     filteredUsers.map((u) => (
                                         <tr key={u._id} style={styles.tr}>
                                             <td style={styles.td}>
-                                                <strong>{u.name}</strong>
+                                                <span>{u.name}</span>
                                             </td>
                                             <td style={styles.td}>
                                                 {u.companyId?.name || "N/A"}
@@ -767,7 +767,7 @@ const UserMaster = () => {
                                             </td>
                                             <td style={styles.tdAction}>
                                                 <button
-                                                    style={styles.actionBtn}
+                                                    style={styles.actionBtnView}
                                                     onClick={() =>
                                                         handleView(u)
                                                     }>
@@ -948,11 +948,11 @@ const styles = {
         textAlign: "left",
         padding: "16px 10px",
         backgroundColor: "#f9fafb",
-        color: "#6b7280",
+        color: "#000000",
         fontSize: "12px",
         textTransform: "uppercase",
         letterSpacing: "0.05em",
-        fontWeight: "600",
+        fontWeight: "700",
     },
     thAction: { textAlign: "right", paddingRight: "24px" },
     tr: { borderBottom: "1px solid #f3f4f6" },
@@ -967,9 +967,9 @@ const styles = {
         whiteSpace: "nowrap",
         paddingRight: "24px",
     },
-    actionBtn: {
-        background: "#e0e7ff",
-        color: "#3730a3",
+     actionBtn: {
+        background: "#d017d6",
+        color: "#e4e4e4",
         border: "none",
         borderRadius: "6px",
         width: "32px",
@@ -979,10 +979,23 @@ const styles = {
         alignItems: "center",
         cursor: "pointer",
         marginRight: "4px",
+        margin:"5px",
     },
     actionBtnDelete: {
-        background: "#fee2e2",
-        color: "#991b1b",
+        background: "#ef1414",
+        color: "#ffffff",
+        border: "none",
+        borderRadius: "6px",
+        width: "32px",
+        height: "32px",
+        display: "inline-flex",
+        justifyContent: "center",
+        alignItems: "center",
+        cursor: "pointer",
+    },
+    actionBtnView: {
+        background: "#7379c9",
+        color: "#ffffff",
         border: "none",
         borderRadius: "6px",
         width: "32px",

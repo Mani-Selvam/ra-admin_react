@@ -76,12 +76,23 @@ exports.getTickets = async (req, res) => {
             .populate("status_id", "name") // ✅ IMPORTANT: Populate status_id to show status name
             .populate("priority_id", "name")
             .populate("company_id", "name")
+            .select("+closed_at +createdAt +updatedAt") // ✅ Explicitly include date fields
             .sort({ createdAt: -1 });
+
+        // Ensure closed_at is properly formatted in response
+        const formattedTickets = tickets.map(ticket => {
+            const ticketObj = ticket.toObject();
+            return {
+                ...ticketObj,
+                createdAt: ticket.createdAt, // ISO string
+                closed_at: ticket.closed_at, // ISO string if exists, null otherwise
+            };
+        });
 
         res.status(200).json({
             success: true,
-            count: tickets.length,
-            data: tickets,
+            count: formattedTickets.length,
+            data: formattedTickets,
         });
     } catch (error) {
         res.status(500).json({ success: false, message: error.message });
@@ -100,12 +111,23 @@ exports.updateTicket = async (req, res) => {
                 .json({ success: false, message: "Ticket not found" });
         }
 
-        // If new image uploaded, handle logic here (delete old one, save new path)
-        // For simplicity, we are just updating text fields here
-        ticket = await Ticket.findByIdAndUpdate(req.params.id, req.body, {
-            new: true,
-            runValidators: true,
-        });
+        // Manually update fields from request body
+        if (req.body.company_id !== undefined) ticket.company_id = req.body.company_id;
+        if (req.body.department_id !== undefined) ticket.department_id = req.body.department_id;
+        if (req.body.title !== undefined) ticket.title = req.body.title;
+        if (req.body.description !== undefined) ticket.description = req.body.description;
+        if (req.body.priority_id !== undefined) ticket.priority_id = req.body.priority_id;
+        if (req.body.status_id !== undefined) ticket.status_id = req.body.status_id;
+        if (req.body.status !== undefined) ticket.status = req.body.status;
+        if (req.body.location !== undefined) ticket.location = req.body.location;
+        
+        // Properly handle closed_at as a Date object
+        if (req.body.closed_at !== undefined) {
+            ticket.closed_at = req.body.closed_at ? new Date(req.body.closed_at) : null;
+        }
+
+        // Save the document (this will trigger pre-save hooks if any)
+        await ticket.save();
 
         // Populate all relationships including status_id to return full details
         await ticket.populate("institution_id", "name");

@@ -1,6 +1,7 @@
 import axios from "axios";
+import API_ENDPOINTS from "../../../config/apiConfig";
 
-const API_URL = "http://localhost:5000/api/work-analysis";
+const API_URL = `${API_ENDPOINTS.BASE_URL}/api/work-analysis`;
 
 const getAuthHeader = () => {
     const token = localStorage.getItem("token");
@@ -55,6 +56,17 @@ export const getMaterialApprovedAnalysis = async () => {
         console.error("❌ getMaterialApprovedAnalysis - Error:", error);
         throw new Error(
             error.response?.data?.message || "Failed to fetch Material Approved analysis",
+        );
+    }
+};
+
+export const updateWorkAnalysis = async (analysisId, updateData) => {
+    try {
+        const response = await axios.put(`${API_URL}/${analysisId}`, updateData, getAuthHeader());
+        return response.data;
+    } catch (error) {
+        throw new Error(
+            error.response?.data?.message || "Failed to update work analysis",
         );
     }
 };

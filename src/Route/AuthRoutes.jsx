@@ -24,6 +24,8 @@ const TicketRoutes = {
     CREATE_TICKET_PAGE: "/ticket/create-ticket",
     WORK_PAGE: "/ticket/worker",
     MATERIAL_APPROVED_PAGE: "/ticket/material-approved",
+    CLOSED_PAGE: "/ticket/closed",
+    SHOW_TICKET_PAGE: "/ticket/show-ticket",
 };
 
 const AppsRoutes = {

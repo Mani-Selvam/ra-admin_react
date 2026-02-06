@@ -4,7 +4,7 @@ import {
     createDepartment,
     updateDepartment,
     deleteDepartment,
-} from "./departmentApi";
+} from "@/Components/Api/MasterApi/departmentApi";
 
 // --- ICONS ---
 const PlusIcon = () => (
@@ -224,6 +224,26 @@ const DepartmentMaster = () => {
                 @media (max-width: 768px) {
                     .responsive-hide-mobile { display: none; }
                 }
+                
+                @keyframes slideUp {
+                    from {
+                        opacity: 0;
+                        transform: translateY(30px);
+                    }
+                    to {
+                        opacity: 1;
+                        transform: translateY(0);
+                    }
+                }
+                
+                @keyframes fadeIn {
+                    from {
+                        opacity: 0;
+                    }
+                    to {
+                        opacity: 1;
+                    }
+                }
             `}</style>
 
             {/* 1. VIEW DETAILS MODAL */}
@@ -231,42 +251,86 @@ const DepartmentMaster = () => {
                 <div style={styles.modalOverlay}>
                     <div
                         style={{
-                            ...styles.modalContent,
+                            ...styles.viewModalContent,
                             width: modalWidth,
                             maxWidth: modalMaxWidth,
                         }}>
-                        <div style={styles.modalHeader}>
-                            <h3 style={styles.modalTitle}>{viewData.name}</h3>
+                        {/* Modal Header with Close Button */}
+                        <div style={styles.viewModalHeader}>
                             <button
                                 onClick={closePopup}
-                                style={styles.iconBtnClose}>
+                                style={styles.viewModalCloseBtn}>
                                 <CloseIcon />
                             </button>
                         </div>
-                        <div style={styles.modalBody}>
-                            <div style={styles.detailRow}>
-                                <strong>Status:</strong>
-                                <span
-                                    style={{
-                                        ...styles.statusBadge,
-                                        color:
-                                            viewData.status === "Active"
-                                                ? "#065f46"
-                                                : "#9f1239",
-                                        backgroundColor:
-                                            viewData.status === "Active"
-                                                ? "#d1fae5"
-                                                : "#fecdd3",
-                                    }}>
-                                    {viewData.status}
-                                </span>
+
+                        {/* Card Body */}
+                        <div style={styles.viewCardBody}>
+                            {/* Icon Section */}
+                            <div style={styles.iconSection}>
+                                <div style={styles.departmentIcon}>
+                                    <i className="ti ti-building" style={styles.largeIcon}></i>
+                                </div>
+                            </div>
+
+                            {/* Department Name */}
+                            <h2 style={styles.departmentName}>{viewData.name}</h2>
+
+                            {/* Details Grid */}
+                            <div style={styles.detailsGrid}>
+                                <div style={styles.detailItem}>
+                                    <label style={styles.detailLabel}>Department Name</label>
+                                    <p style={styles.detailValue}>{viewData.name}</p>
+                                </div>
+
+                                <div style={styles.detailItem}>
+                                    <label style={styles.detailLabel}>Status</label>
+                                    <div style={styles.statusBadgeContainer}>
+                                        <span
+                                            style={{
+                                                ...styles.statusBadgeLarge,
+                                                color:
+                                                    viewData.status === "Active"
+                                                        ? "#065f46"
+                                                        : "#9f1239",
+                                                backgroundColor:
+                                                    viewData.status === "Active"
+                                                        ? "#d1fae5"
+                                                        : "#fecdd3",
+                                            }}>
+                                            {viewData.status === "Active" ? "✓ Active" : "✗ Inactive"}
+                                        </span>
+                                    </div>
+                                </div>
+
+                                {viewData.createdAt && (
+                                    <div style={styles.detailItem}>
+                                        <label style={styles.detailLabel}>Created Date</label>
+                                        <p style={styles.detailValue}>
+                                            {new Date(viewData.createdAt).toLocaleDateString()}
+                                        </p>
+                                    </div>
+                                )}
+
+                                {viewData.updatedAt && (
+                                    <div style={styles.detailItem}>
+                                        <label style={styles.detailLabel}>Updated Date</label>
+                                        <p style={styles.detailValue}>
+                                            {new Date(viewData.updatedAt).toLocaleDateString()}
+                                        </p>
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* Action Buttons */}
+                            <div style={styles.viewModalActions}>
+                                <button
+                                    onClick={closePopup}
+                                    style={styles.viewModalCloseActionBtn}>
+                                    Close
+                                </button>
                             </div>
                         </div>
-                        <button
-                            onClick={closePopup}
-                            style={styles.modalCloseBtn}>
-                            Close
-                        </button>
                     </div>
                 </div>
             )}
@@ -423,7 +487,7 @@ const DepartmentMaster = () => {
                                     filteredDepartments.map((d) => (
                                         <tr key={d._id} style={styles.tr}>
                                             <td style={styles.tdLeft}>
-                                                <strong>{d.name}</strong>
+                                                <span>{d.name}</span>
                                             </td>
                                             <td style={styles.tdCenter}>
                                                 <span
@@ -449,7 +513,7 @@ const DepartmentMaster = () => {
                                                         styles.actionButtonGroup
                                                     }>
                                                     <button
-                                                        style={styles.actionBtn}
+                                                        style={styles.actionBtnView}
                                                         onClick={() =>
                                                             handleView(d)
                                                         }
@@ -457,7 +521,7 @@ const DepartmentMaster = () => {
                                                         <ViewIcon />
                                                     </button>
                                                     <button
-                                                        style={styles.actionBtn}
+                                                        style={styles.actionBtnEdit}
                                                         onClick={() =>
                                                             handleEdit(d)
                                                         }
@@ -496,6 +560,7 @@ const styles = {
         fontFamily:
             "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif",
         padding: "20px",
+      
     },
 
     container: {
@@ -733,23 +798,287 @@ const styles = {
         display: "inline-block",
     },
 
-    actionBtn: {
-        background: "#e0e7ff",
-        color: "#3730a3",
+    actionBtnEdit: {
+       background: "#d017d6",
+        color: "#e4e4e4",
         border: "none",
-        borderRadius: "50%",
-        width: "36px", // Slightly larger for better clickability
-        height: "36px",
+        borderRadius: "6px",
+        width: "32px",
+        height: "32px",
         display: "inline-flex",
         justifyContent: "center",
         alignItems: "center",
         cursor: "pointer",
-        boxShadow: "0 2px 4px rgba(0,0,0,0.1)",
-        transition: "transform 0.1s ease, box-shadow 0.1s ease",
+        marginRight: "4px",
+    },
+  
+    actionBtnDelete: {
+        background: "#ef1414",
+        color: "#ffffff",
+        border: "none",
+        borderRadius: "6px",
+        width: "32px",
+        height: "32px",
+        display: "inline-flex",
+        justifyContent: "center",
+        alignItems: "center",
+        cursor: "pointer",
+    },
+    actionBtnView: {
+        background: "#7379c9",
+        color: "#ffffff",
+        border: "none",
+        borderRadius: "6px",
+        width: "32px",
+        height: "32px",
+        display: "inline-flex",
+        justifyContent: "center",
+        alignItems: "center",
+        cursor: "pointer",
     },
     actionBtnHover: {
         transform: "scale(1.05)",
         boxShadow: "0 4px 8px rgba(0,0,0,0.15)",
+    },
+
+    /* MODAL OVERLAY */
+    modalOverlay: {
+        position: "fixed",
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        backgroundColor: "rgba(0, 0, 0, 0.5)",
+        display: "flex",
+        justifyContent: "center",
+        alignItems: "center",
+        zIndex: 9999,
+        animation: "fadeIn 0.3s ease-out",
+        backdropFilter: "blur(2px)",
+    },
+
+    /* ENHANCED VIEW MODAL STYLES */
+    viewModalContent: {
+        background: "#ffffff",
+        borderRadius: "20px",
+        boxShadow: "0 25px 70px rgba(0,0,0,0.25)",
+        overflow: "hidden",
+        animation: "slideUp 0.4s ease-out",
+        minWidth: "320px",
+        maxWidth: "500px",
+        position: "relative",
+        zIndex: 10,
+    },
+
+    viewModalHeader: {
+        padding: "12px 16px",
+        display: "flex",
+        justifyContent: "flex-end",
+        borderBottom: "1px solid #f3f4f6",
+    },
+
+    viewModalCloseBtn: {
+        background: "#f3f4f6",
+        color: "#6b7280",
+        border: "none",
+        borderRadius: "50%",
+        width: "40px",
+        height: "40px",
+        display: "flex",
+        justifyContent: "center",
+        alignItems: "center",
+        cursor: "pointer",
+        transition: "all 0.2s ease",
+        fontSize: "20px",
+    },
+
+    viewCardBody: {
+        padding: "20px 20px",
+        textAlign: "center",
+    },
+
+    iconSection: {
+        marginBottom: "12px",
+    },
+
+    departmentIcon: {
+        display: "inline-flex",
+        justifyContent: "center",
+        alignItems: "center",
+        width: "60px",
+        height: "60px",
+        borderRadius: "50%",
+        backgroundColor: "#eff6ff",
+        marginBottom: "10px",
+    },
+
+    largeIcon: {
+        fontSize: "32px",
+        color: "#2563eb",
+    },
+
+    departmentName: {
+        fontSize: "22px",
+        fontWeight: "800",
+        color: "#0f172a",
+        margin: "0 0 16px 0",
+        letterSpacing: "-0.5px",
+    },
+
+    detailsGrid: {
+        display: "grid",
+        gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))",
+        gap: "12px",
+        marginBottom: "16px",
+        textAlign: "left",
+        backgroundColor: "#f9fafb",
+        padding: "12px",
+        borderRadius: "10px",
+    },
+
+    detailItem: {
+        display: "flex",
+        flexDirection: "column",
+    },
+
+    detailLabel: {
+        fontSize: "11px",
+        fontWeight: "700",
+        color: "#6b7280",
+        textTransform: "uppercase",
+        letterSpacing: "0.3px",
+        marginBottom: "4px",
+    },
+
+    detailValue: {
+        fontSize: "14px",
+        fontWeight: "600",
+        color: "#1f2937",
+        margin: "0",
+    },
+
+    statusBadgeContainer: {
+        display: "flex",
+        alignItems: "center",
+    },
+
+    statusBadgeLarge: {
+        padding: "8px 16px",
+        borderRadius: "8px",
+        fontSize: "14px",
+        fontWeight: "700",
+        display: "inline-block",
+        minWidth: "100px",
+        textAlign: "center",
+    },
+
+    viewModalActions: {
+        display: "flex",
+        gap: "12px",
+        justifyContent: "center",
+        paddingTop: "12px",
+        borderTop: "1px solid #f3f4f6",
+    },
+
+    viewModalCloseActionBtn: {
+        padding: "12px 32px",
+        backgroundColor: "#2563eb",
+        color: "#ffffff",
+        border: "none",
+        borderRadius: "10px",
+        fontSize: "16px",
+        fontWeight: "600",
+        cursor: "pointer",
+        boxShadow: "0 4px 12px rgba(37,99,235,0.3)",
+        transition: "all 0.2s ease",
+    },
+
+    /* DELETE MODAL STYLES */
+    deleteModalContent: {
+        background: "#ffffff",
+        borderRadius: "16px",
+        boxShadow: "0 20px 60px rgba(0,0,0,0.2)",
+        overflow: "hidden",
+        animation: "slideUp 0.3s ease-out",
+        minWidth: "300px",
+    },
+
+    modalHeader: {
+        padding: "24px 28px",
+        borderBottom: "1px solid #f3f4f6",
+    },
+
+    deleteTitle: {
+        margin: 0,
+        fontSize: "20px",
+        fontWeight: "700",
+        color: "#dc2626",
+    },
+
+    deleteBody: {
+        padding: "24px 28px",
+        backgroundColor: "#fef2f2",
+    },
+
+    deleteMessage: {
+        fontSize: "15px",
+        color: "#374151",
+        margin: 0,
+        lineHeight: "1.6",
+    },
+
+    deleteActions: {
+        display: "flex",
+        gap: "12px",
+        padding: "20px 28px",
+        borderTop: "1px solid #f3f4f6",
+        justifyContent: "flex-end",
+    },
+
+    cancelDeleteBtn: {
+        padding: "10px 24px",
+        backgroundColor: "#f3f4f6",
+        color: "#374151",
+        border: "1px solid #d1d5db",
+        borderRadius: "8px",
+        fontSize: "15px",
+        fontWeight: "600",
+        cursor: "pointer",
+        transition: "all 0.2s ease",
+    },
+
+    confirmDeleteBtn: {
+        padding: "10px 24px",
+        backgroundColor: "#dc2626",
+        color: "#ffffff",
+        border: "none",
+        borderRadius: "8px",
+        fontSize: "15px",
+        fontWeight: "600",
+        cursor: "pointer",
+        boxShadow: "0 4px 12px rgba(220,38,38,0.3)",
+        transition: "all 0.2s ease",
+    },
+
+    modalCloseBtn: {
+        padding: "10px 28px",
+        backgroundColor: "#2563eb",
+        color: "#ffffff",
+        border: "none",
+        borderRadius: "8px",
+        fontSize: "15px",
+        fontWeight: "600",
+        cursor: "pointer",
+        boxShadow: "0 4px 12px rgba(37,99,235,0.3)",
+        transition: "all 0.2s ease",
+    },
+
+    iconBtnClose: {
+        background: "transparent",
+        border: "none",
+        cursor: "pointer",
+        padding: "4px",
+        color: "#6b7280",
     },
 };
 

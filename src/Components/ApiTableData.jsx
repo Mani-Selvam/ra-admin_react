@@ -1,8 +1,8 @@
 import React, {useEffect, useState} from "react";
 import {Button, Card, CardBody, Col, Modal, Row, Table, ModalHeader, ModalBody, ModalFooter, Form, FormGroup, Label, Input} from "reactstrap";
-import {apiData} from "../../Data/Api/Api.js";
+import {apiData} from "../Data/Api/Api.js";
 import ("../../../public/assets/vendor/datatable/jquery.dataTables.min.css");
-import ("../../../public/assets/vendor/datatable/jquery.dataTables.min.js");
+import ("../../public/assets/vendor/datatable/jquery.dataTables.min.js");
 
 const ApiTableData = () => {
     const [apiPageData, setApiPageData] = useState(apiData);

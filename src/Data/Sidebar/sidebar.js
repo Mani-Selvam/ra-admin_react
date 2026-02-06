@@ -21,6 +21,11 @@ import {
 } from "@/Route/AuthRoutes";
 
 export const sidebarConfig = [
+    {
+        name: "Dashboard",
+        path: DashboardRoutes.MAIN_PAGE,
+        iconClass: "ph-duotone ph-house-line",
+    },
     // {
     //     type: "dropdown",
     //     title: "Dashboard",
@@ -38,10 +43,9 @@ export const sidebarConfig = [
     // },
     {
         type: "dropdown",
-        title: "Master",
+        title: "",
         iconClass: "ph-duotone ph-house-line",
         name: "master",
-        badgeCount: 3,
         collapseId: "master",
         path: "/master",
         children: [
@@ -58,16 +62,16 @@ export const sidebarConfig = [
     },
     {
         type: "dropdown",
-        title: "Ticket",
+        title: "",
         iconClass: "ph-duotone ph-house-line",
         name: "ticket",
-        badgeCount: 3,
         collapseId: "ticket",
         path: "/ticket",
         children: [
             { name: "Ticket", path: TicketRoutes.TICKET_PAGE },
             { name: "Work Details", path: TicketRoutes.WORK_PAGE },
             { name: "Material Approved", path: TicketRoutes.MATERIAL_APPROVED_PAGE },
+            { name: "Closed Ticket", path: TicketRoutes.CLOSED_PAGE },
         ],
     },
 

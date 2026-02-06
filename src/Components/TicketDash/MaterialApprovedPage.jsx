@@ -1,14 +1,16 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import {
     getWorkerAssignedTickets,
     getWorkerWorkAnalysis,
-} from "./workerApi";
-import { getMaterialApprovedAnalysis } from "./workAnalysisAPI";
-import { updateTicket } from "./ticketAPI";
-import { getTicketStatuses } from "../MasterDash/ticketStatusApi";
-import { createWorkLog, getWorkLogsByAnalysis } from "./workLogAPI";
+} from "@/Components/Api/TicketApi/workerAPI";
+import { getMaterialApprovedAnalysis } from "@/Components/Api/TicketApi/workAnalysisAPI";
+import { updateTicket, getTickets } from "@/Components/Api/TicketApi/ticketAPI";
+import { getTicketStatuses } from "@/Components/Api/MasterApi/ticketStatusApi";
+import { createWorkLog, getWorkLogsByAnalysis } from "@/Components/Api/TicketApi/workLogAPI";
+import { API_ENDPOINTS } from "../../config/apiConfig";
 import WorkAnalysisForm from "./WorkAnalysisForm";
 import "./ticketForm.css";
+import mapIcon from "../../assets/map.png";
 
 // --- SVG Icons ---
 const SearchIcon = () => (
@@ -135,6 +137,13 @@ const CheckCircleIcon = () => (
     </svg>
 );
 
+const CameraIcon = () => (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6a2 2 0 0 1 2 2z"></path>
+        <circle cx="12" cy="13" r="4"></circle>
+    </svg>
+);
+
 const MaterialApprovedPage = () => {
     const [workAnalyses, setWorkAnalyses] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -147,14 +156,113 @@ const MaterialApprovedPage = () => {
     const [workLogs, setWorkLogs] = useState([]);
     const [ticketStatuses, setTicketStatuses] = useState([]);
     const [loadingLogs, setLoadingLogs] = useState(false);
-    const [logFormData, setLogFormData] = useState({
-        fromTime: "",
-        toTime: "",
-        date: new Date().toISOString().split('T')[0],
+    
+    // Initialize timers from localStorage
+    const [timers, setTimers] = useState(() => {
+        try {
+            const saved = localStorage.getItem('materialApprovedPageTimers');
+            if (saved) {
+                const parsed = JSON.parse(saved);
+                // Convert ISO strings back to Date objects
+                const restored = {};
+                Object.keys(parsed).forEach(key => {
+                    restored[key] = {
+                        ...parsed[key],
+                        startTime: parsed[key].startTime ? new Date(parsed[key].startTime) : null,
+                        endTime: parsed[key].endTime ? new Date(parsed[key].endTime) : null,
+                        systemStartTime: parsed[key].systemStartTime ? new Date(parsed[key].systemStartTime) : null
+                    };
+                });
+                return restored;
+            }
+        } catch (e) {
+            console.warn("Failed to restore timers from localStorage:", e);
+        }
+        return {};
     });
+    
+    const [currentTime, setCurrentTime] = useState(new Date());
+    const [showCompleteWorkModal, setShowCompleteWorkModal] = useState(false);
+    const [selectedAnalysisForCompletion, setSelectedAnalysisForCompletion] = useState(null);
+    const [completeWorkImages, setCompleteWorkImages] = useState([]);
+    const [completeWorkImagePreviews, setCompleteWorkImagePreviews] = useState([]);
+    
+    // Desktop camera support
+    const [showWebcamModal, setShowWebcamModal] = useState(false);
+    const [webcamStream, setWebcamStream] = useState(null);
+    const [showCameraMenu, setShowCameraMenu] = useState(false);
+    const videoRef = React.useRef(null);
+    const canvasRef = React.useRef(null);
 
     const user = JSON.parse(localStorage.getItem("user") || "{}");
     const workerId = user?.id;
+
+    // Save timers to localStorage whenever they change
+    React.useEffect(() => {
+        try {
+            localStorage.setItem('materialApprovedPageTimers', JSON.stringify(timers));
+        } catch (e) {
+            console.warn("Failed to save timers to localStorage:", e);
+        }
+    }, [timers]);
+
+    // Inject blink CSS for location highlight
+    React.useEffect(() => {
+        if (typeof document === 'undefined') return;
+        if (document.getElementById('map-blink-style')) return;
+        const style = document.createElement('style');
+        style.id = 'map-blink-style';
+        style.textContent = `
+            /* Removed blink animation — use a simple map icon above the location text */
+            .location-link {
+                background: none;
+                border: none;
+                padding: 0;
+                margin: 0;
+                font: inherit;
+                color: inherit;
+                text-align: left;
+                cursor: pointer;
+            }
+            .map-icon-btn {
+                background: none;
+                border: none;
+                padding: 0;
+                margin: 0 0 6px 0;
+                font-size: 18px;
+                line-height: 1;
+                cursor: pointer;
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+            }
+        `;
+        document.head.appendChild(style);
+    }, []);
+
+    const openMap = (query) => {
+        if (!query) return;
+        // Try to get user's current position to use as origin
+        if (navigator && navigator.geolocation) {
+            navigator.geolocation.getCurrentPosition(
+                (pos) => {
+                    const origin = `${pos.coords.latitude},${pos.coords.longitude}`;
+                    const url = `https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(origin)}&destination=${encodeURIComponent(query)}&travelmode=driving`;
+                    window.open(url, '_blank');
+                },
+                (err) => {
+                    // If user denies or error, open directions with only destination (Maps will use current location if available)
+                    const url = `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(query)}&travelmode=driving`;
+                    window.open(url, '_blank');
+                    showToast('Opened directions without start location', 'info');
+                },
+                { timeout: 5000 }
+            );
+        } else {
+            const url = `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(query)}&travelmode=driving`;
+            window.open(url, '_blank');
+        }
+    };
 
     useEffect(() => {
         const initPage = async () => {
@@ -173,11 +281,36 @@ const MaterialApprovedPage = () => {
         initPage();
     }, [workerId]);
 
+    // Update current time every second
+    useEffect(() => {
+        const timeInterval = setInterval(() => {
+            setCurrentTime(new Date());
+        }, 1000);
+        return () => clearInterval(timeInterval);
+    }, []);
+
     const fetchWorkAnalyses = async () => {
         try {
             const data = await getMaterialApprovedAnalysis();
             const approvedAnalyses = Array.isArray(data) ? data : data.data || [];
-            setWorkAnalyses(approvedAnalyses);
+
+            // Enrich analyses with full ticket objects so fields like `location` are available
+            try {
+                const allTicketsRes = await getTickets(false);
+                const ticketsArray = Array.isArray(allTicketsRes) ? allTicketsRes : allTicketsRes.data || [];
+                const ticketMap = new Map((ticketsArray || []).map(t => [String(t._id), t]));
+
+                const enriched = approvedAnalyses.map((a) => {
+                    const ticketId = a.ticket_id?._id || a.ticket_id;
+                    const fullTicket = ticketMap.get(String(ticketId)) || a.ticket_id;
+                    return { ...a, ticket_id: fullTicket };
+                });
+
+                setWorkAnalyses(enriched);
+            } catch (err) {
+                console.warn('Could not enrich analyses with tickets:', err);
+                setWorkAnalyses(approvedAnalyses);
+            }
         } catch (error) {
             console.error("Error fetching Material Approved analyses:", error);
             showToast("Failed to load Material Approved analyses", "error");
@@ -187,6 +320,68 @@ const MaterialApprovedPage = () => {
     const showToast = (message, type = "success") => {
         setToast({ show: true, message, type });
         setTimeout(() => setToast({ show: false, message: "", type }), 3000);
+    };
+
+    // Calculate total logged time for current user
+    const calculateTotalLoggedTime = () => {
+        let totalSeconds = 0;
+        const currentUserName = (user?.name || "").toLowerCase().trim();
+        
+        workAnalyses.forEach(analysis => {
+            workLogs.forEach(log => {
+                const logMatches = String(log.analysis_id) === String(analysis._id) && 
+                                  ((log.worker_name || "").toLowerCase().trim() === currentUserName ||
+                                   String(log.worker_id || "") === String(user?.id || ""));
+                
+                if (logMatches) {
+                    // Parse duration like "0h 5m 30s"
+                    const durationStr = String(log.duration || "").trim();
+                    const durationParts = durationStr.match(/(\d+)h\s*(\d+)m\s*(\d+)s/i);
+                    if (durationParts && durationParts.length >= 4) {
+                        const hours = parseInt(durationParts[1]) || 0;
+                        const minutes = parseInt(durationParts[2]) || 0;
+                        const seconds = parseInt(durationParts[3]) || 0;
+                        totalSeconds += hours * 3600 + minutes * 60 + seconds;
+                    }
+                }
+            });
+        });
+        
+        const hours = Math.floor(totalSeconds / 3600);
+        const minutes = Math.floor((totalSeconds % 3600) / 60);
+        const seconds = totalSeconds % 60;
+        
+        return `${hours}h ${minutes}m ${seconds}s`;
+    };
+
+    // Calculate total logged time for a specific ticket/analysis for the current logged-in user
+    const calculateTicketTotalTime = (analysisId) => {
+        let totalSeconds = 0;
+        const currentUserName = (user?.name || "").toLowerCase().trim();
+        
+        workLogs.forEach(log => {
+            const logMatches = String(log.analysis_id) === String(analysisId) && 
+                              ((log.worker_name || "").toLowerCase().trim() === currentUserName ||
+                               String(log.worker_id || "") === String(user?.id || ""));
+            
+            if (logMatches) {
+                // Parse duration like "0h 5m 30s"
+                const durationStr = String(log.duration || "").trim();
+                const durationParts = durationStr.match(/(\d+)h\s*(\d+)m\s*(\d+)s/i);
+                if (durationParts && durationParts.length >= 4) {
+                    const hours = parseInt(durationParts[1]) || 0;
+                    const minutes = parseInt(durationParts[2]) || 0;
+                    const seconds = parseInt(durationParts[3]) || 0;
+                    totalSeconds += hours * 3600 + minutes * 60 + seconds;
+                }
+            }
+        });
+        
+        const hours = Math.floor(totalSeconds / 3600);
+        const minutes = Math.floor((totalSeconds % 3600) / 60);
+        const seconds = totalSeconds % 60;
+        
+        return `${hours}h ${minutes}m ${seconds}s`;
     };
 
     const loadWorkLogs = async (analysisId) => {
@@ -203,38 +398,215 @@ const MaterialApprovedPage = () => {
         }
     };
 
-    const calculateDuration = (fromTime, toTime) => {
-        if (!fromTime || !toTime) return "0h 0m";
-        const [fromHour, fromMin] = fromTime.split(':').map(Number);
-        const [toHour, toMin] = toTime.split(':').map(Number);
-        let hours = toHour - fromHour;
-        let minutes = toMin - fromMin;
-        
-        if (minutes < 0) {
-            hours--;
-            minutes += 60;
+    // Fetch full ticket data to populate all fields in the modal
+    const handleViewAnalysisDetails = async (analysis) => {
+        try {
+            // Try to fetch all tickets and find the matching one
+            const allTickets = await getTickets(false);
+            const ticketsArray = Array.isArray(allTickets) ? allTickets : allTickets.data || [];
+            
+            // Find the matching ticket by ID
+            const ticketId = analysis.ticket_id?._id || analysis.ticket_id;
+            const fullTicket = ticketsArray.find(t => String(t._id) === String(ticketId));
+            
+            // Merge the full ticket data with the analysis
+            const enrichedAnalysis = {
+                ...analysis,
+                ticket_id: fullTicket || analysis.ticket_id
+            };
+            
+            setSelectedAnalysisToView(enrichedAnalysis);
+        } catch (error) {
+            console.error("Error fetching full ticket details:", error);
+            // If fetch fails, just use the analysis as-is
+            setSelectedAnalysisToView(analysis);
+            showToast("Could not load full ticket details", "error");
         }
-        return `${hours}h ${minutes}m`;
     };
 
-    const handleSubmitWorkLog = async () => {
-        if (!logFormData.fromTime || !logFormData.toTime) {
-            showToast("Please fill in both From Time and To Time", "error");
+    const calculateDuration = (fromTime, toTime) => {
+        if (!fromTime || !toTime) return "0h 0m 0s";
+        
+        // Convert to Date objects if they're strings
+        const fromDate = typeof fromTime === 'string' ? new Date(fromTime) : fromTime;
+        const toDate = typeof toTime === 'string' ? new Date(toTime) : toTime;
+        
+        const fromMs = fromDate.getTime();
+        const toMs = toDate.getTime();
+        const diffMs = toMs - fromMs;
+        
+        // Calculate hours, minutes, and seconds
+        const diffSeconds = Math.floor(diffMs / 1000);
+        const hours = Math.floor(diffSeconds / 3600);
+        const minutes = Math.floor((diffSeconds % 3600) / 60);
+        const seconds = diffSeconds % 60;
+        
+        return `${hours}h ${minutes}m ${seconds}s`;
+    };
+
+    const handleStartTimer = async () => {
+        try {
+            // Just start the timer without changing ticket status
+            // Status will only change when work is completed
+            const analysisId = selectedAnalysisForLog._id;
+            const now = new Date();
+            setTimers(prev => ({
+                ...prev,
+                [analysisId]: {
+                    startTime: now,
+                    endTime: null,
+                    isRunning: true,
+                    duration: "0h 0m"
+                }
+            }));
+            console.log("✅ Timer started for analysis", analysisId, "at:", now.toLocaleTimeString());
+            showToast("⏱️ Timer started!", "success");
+            
+        } catch (error) {
+            console.error("Error starting timer:", error);
+            showToast("Failed to start timer: " + (error.response?.data?.message || error.message), "error");
+        }
+    };
+
+    const handleEndTimer = async () => {
+        if (!selectedAnalysisForLog) return;
+        const analysisId = selectedAnalysisForLog._id;
+        const timerData = timers[analysisId];
+        if (!timerData || !timerData.startTime) return;
+        
+        const now = new Date();
+        const duration = calculateDuration(timerData.startTime, now);
+        
+        const updatedTimerData = {
+            ...timerData,
+            endTime: now,
+            isRunning: false,
+            duration: duration
+        };
+        
+        setTimers(prev => ({
+            ...prev,
+            [analysisId]: updatedTimerData
+        }));
+        console.log("🛑 Timer ended for analysis", analysisId, "at:", now.toLocaleTimeString(), "Duration:", duration);
+        
+        // Automatically submit work log after ending timer with the complete timer data
+        showToast("Timer ended! Submitting work log...", "success");
+        
+        // Pass the timer data directly to avoid state sync issues
+        setTimeout(() => {
+            handleSubmitWorkLogAuto(updatedTimerData);
+        }, 300);
+    };
+
+    const handleSubmitWorkLogAuto = async (timerData) => {
+        if (!selectedAnalysisForLog) return;
+        
+        const analysisId = selectedAnalysisForLog._id;
+        
+        if (!timerData || !timerData.startTime || !timerData.endTime) {
+            console.error("Timer data incomplete:", timerData);
+            showToast("Timer data incomplete", "error");
             return;
         }
 
         try {
-            const duration = calculateDuration(logFormData.fromTime, logFormData.toTime);
+            // Format time strings (HH:MM)
+            const startTimeDate = timerData.startTime instanceof Date ? timerData.startTime : new Date(timerData.startTime);
+            const endTimeDate = timerData.endTime instanceof Date ? timerData.endTime : new Date(timerData.endTime);
+            
+            const fromTimeStr = startTimeDate.getHours().toString().padStart(2, '0') + ':' + 
+                               startTimeDate.getMinutes().toString().padStart(2, '0');
+            const toTimeStr = endTimeDate.getHours().toString().padStart(2, '0') + ':' + 
+                             endTimeDate.getMinutes().toString().padStart(2, '0');
+            const dateStr = startTimeDate.toISOString().split('T')[0];
             
             const workLogData = {
                 ticket_id: selectedAnalysisForLog.ticket_id?._id,
                 analysis_id: selectedAnalysisForLog._id,
                 worker_id: user?.id,
                 worker_name: user?.name || selectedAnalysisForLog.worker_name,
-                from_time: logFormData.fromTime,
-                to_time: logFormData.toTime,
-                duration: duration,
-                log_date: logFormData.date,
+                from_time: fromTimeStr,
+                to_time: toTimeStr,
+                duration: timerData.duration,
+                log_date: dateStr,
+            };
+
+            console.log("📝 Submitting work log:", workLogData);
+            const savedLog = await createWorkLog(workLogData);
+            console.log("🟢 Saved Work Log:", savedLog);
+            showToast("Work log submitted successfully!", "success");
+
+            // Refresh and open Work Logs view so user can verify the saved entry
+            try {
+                await loadWorkLogs(selectedAnalysisForLog._id);
+                setShowViewLog(true);
+            } catch (e) {
+                console.warn("Could not auto-open work logs view:", e.message || e);
+            }
+
+            const ticket = selectedAnalysisForLog.ticket_id;
+            const ticketId = ticket._id;
+            const statusName = "Working In Progress";
+            
+            let statusId = null;
+            let statusObj = null;
+            if (ticketStatuses && ticketStatuses.length > 0) {
+                statusObj = ticketStatuses.find((s) => String(s.name).toLowerCase() === String(statusName).toLowerCase());
+                statusId = statusObj?._id || statusObj?.id || null;
+            }
+            
+            const updatePayload = statusId ? { status_id: statusId } : { status: statusName };
+            await updateTicket(ticketId, updatePayload);
+            
+            showToast("Ticket status updated to Working In Progress", "success");
+            
+            // Reset timer for this analysis
+            setShowWorkLogForm(false);
+            setTimers(prev => {
+                const newTimers = { ...prev };
+                delete newTimers[analysisId];
+                return newTimers;
+            });
+            
+            setTimeout(() => {
+                fetchWorkAnalyses();
+            }, 500);
+            
+        } catch (error) {
+            console.error("Error submitting work log:", error);
+            showToast("Failed to submit work log: " + error.message, "error");
+        }
+    };
+
+    const handleSubmitWorkLog = async () => {
+        if (!selectedAnalysisForLog) return;
+        
+        const analysisId = selectedAnalysisForLog._id;
+        const timerData = timers[analysisId];
+        
+        if (!timerData || !timerData.startTime || !timerData.endTime) {
+            showToast("Please start and end the timer", "error");
+            return;
+        }
+
+        try {
+            // Format time strings (HH:MM)
+            const fromTimeStr = timerData.startTime.getHours().toString().padStart(2, '0') + ':' + 
+                               timerData.startTime.getMinutes().toString().padStart(2, '0');
+            const toTimeStr = timerData.endTime.getHours().toString().padStart(2, '0') + ':' + 
+                             timerData.endTime.getMinutes().toString().padStart(2, '0');
+            const dateStr = timerData.startTime.toISOString().split('T')[0];
+            
+            const workLogData = {
+                ticket_id: selectedAnalysisForLog.ticket_id?._id,
+                analysis_id: selectedAnalysisForLog._id,
+                worker_id: user?.id,
+                worker_name: user?.name || selectedAnalysisForLog.worker_name,
+                from_time: fromTimeStr,
+                to_time: toTimeStr,
+                duration: timerData.duration,
+                log_date: dateStr,
             };
 
             const savedLog = await createWorkLog(workLogData);
@@ -265,11 +637,12 @@ const MaterialApprovedPage = () => {
             
             showToast("Ticket status updated to Working In Progress", "success");
             
+            // Reset timer for this analysis
             setShowWorkLogForm(false);
-            setLogFormData({
-                fromTime: "",
-                toTime: "",
-                date: new Date().toISOString().split('T')[0],
+            setTimers(prev => {
+                const newTimers = { ...prev };
+                delete newTimers[analysisId];
+                return newTimers;
             });
             
             setTimeout(() => {
@@ -290,6 +663,130 @@ const MaterialApprovedPage = () => {
                 return;
             }
             
+            // Open the completion form modal
+            setSelectedAnalysisForCompletion(analysis);
+            setCompleteWorkImages([]);
+            setCompleteWorkImagePreviews([]);
+            setShowCompleteWorkModal(true);
+            
+        } catch (error) {
+            console.error("Error opening complete work form:", error);
+            showToast("Failed to open completion form: " + error.message, "error");
+        }
+    };
+
+    const handleCompleteWorkImageChange = (e) => {
+        const files = Array.from(e.target.files || []);
+        setCompleteWorkImages(files);
+        
+        // Create previews
+        const previews = files.map(file => URL.createObjectURL(file));
+        setCompleteWorkImagePreviews(previews);
+    };
+
+    // Camera handlers - simple click triggers for static input elements
+    const handleOpenRearCamera = () => {
+        const input = document.getElementById('cameraInputRear');
+        if (input) {
+            input.click();
+            setShowCameraMenu(false);
+        }
+    };
+
+    const handleOpenFrontCamera = () => {
+        const input = document.getElementById('cameraInputFront');
+        if (input) {
+            input.click();
+            setShowCameraMenu(false);
+        }
+    };
+
+    const handleOpenGallery = () => {
+        const input = document.getElementById('cameraInputGallery');
+        if (input) {
+            input.click();
+            setShowCameraMenu(false);
+        }
+    };
+
+    const handleOpenDesktopWebcam = () => {
+        startWebcam();
+        setShowCameraMenu(false);
+    };
+
+    const handleOpenCamera = () => {
+        setShowCameraMenu(true);
+    };
+
+    // Desktop Webcam Support
+    const startWebcam = async () => {
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({
+                video: { width: { ideal: 1280 }, height: { ideal: 720 } },
+                audio: false
+            });
+            setWebcamStream(stream);
+            if (videoRef.current) {
+                videoRef.current.srcObject = stream;
+            }
+            setShowWebcamModal(true);
+            console.log("✅ Webcam started");
+        } catch (error) {
+            console.error("❌ Webcam error:", error);
+            if (error.name === 'NotAllowedError') {
+                showToast("Camera permission denied. Please allow camera access.", "error");
+            } else if (error.name === 'NotFoundError') {
+                showToast("No camera device found on this computer.", "error");
+            } else {
+                showToast("Could not access webcam: " + error.message, "error");
+            }
+        }
+    };
+
+    const captureWebcamPhoto = () => {
+        if (videoRef.current && canvasRef.current) {
+            const context = canvasRef.current.getContext('2d');
+            canvasRef.current.width = videoRef.current.videoWidth;
+            canvasRef.current.height = videoRef.current.videoHeight;
+            context.drawImage(videoRef.current, 0, 0);
+            
+            // Convert canvas to blob and add to images
+            canvasRef.current.toBlob((blob) => {
+                const file = new File([blob], `webcam-${Date.now()}.jpg`, { type: 'image/jpeg' });
+                const preview = canvasRef.current.toDataURL('image/jpeg');
+                
+                setCompleteWorkImages(prev => [...prev, file]);
+                setCompleteWorkImagePreviews(prev => [...prev, preview]);
+                
+                showToast("✅ Photo captured successfully!", "success");
+                console.log("📸 Webcam photo captured");
+            }, 'image/jpeg', 0.95);
+        }
+    };
+
+    const stopWebcam = () => {
+        if (webcamStream) {
+            webcamStream.getTracks().forEach(track => track.stop());
+            setWebcamStream(null);
+            setShowWebcamModal(false);
+            console.log("🛑 Webcam stopped");
+        }
+    };
+
+    // Cleanup webcam when modal closes
+    useEffect(() => {
+        return () => {
+            if (webcamStream && !showWebcamModal) {
+                webcamStream.getTracks().forEach(track => track.stop());
+            }
+        };
+    }, [showWebcamModal, webcamStream]);
+
+    const handleSubmitCompleteWork = async () => {
+        try {
+            if (!selectedAnalysisForCompletion) return;
+            
+            const ticket = selectedAnalysisForCompletion.ticket_id;
             const ticketId = ticket._id;
             const statusName = "Work Completed";
             
@@ -307,15 +804,21 @@ const MaterialApprovedPage = () => {
             showToast("Updating ticket status to 'Work Completed'...", "success");
             await updateTicket(ticketId, updatePayload);
             
-            showToast("Ticket status updated to Work Completed", "success");
+            showToast("✅ Work marked as completed!", "success");
+            
+            // Close modal and reset
+            setShowCompleteWorkModal(false);
+            setSelectedAnalysisForCompletion(null);
+            setCompleteWorkImages([]);
+            setCompleteWorkImagePreviews([]);
             
             setTimeout(() => {
                 fetchWorkAnalyses();
             }, 500);
             
         } catch (error) {
-            console.error("Error updating ticket status:", error);
-            showToast("Failed to update ticket status: " + (error.response?.data?.message || error.message), "error");
+            console.error("Error completing work:", error);
+            showToast("Failed to complete work: " + (error.response?.data?.message || error.message), "error");
         }
     };
 
@@ -369,6 +872,21 @@ const MaterialApprovedPage = () => {
                     <span style={styles.statsCount}>{filteredAnalyses.length}</span>
                     <span style={styles.statsLabel}>Records Found</span>
                 </div>
+                  {/* --- Search Bar --- */}
+            <div style={styles.searchWrapper}>
+                <div style={styles.searchInputWrapper}>
+                    <span style={styles.searchIcon}>
+                        <SearchIcon />
+                    </span>
+                    <input
+                        type="text"
+                        placeholder="Search "
+                        value={searchTerm}
+                        onChange={(e) => setSearchTerm(e.target.value)}
+                        style={styles.searchInput}
+                    />
+                </div>
+            </div>
             </div>
 
             {/* --- Toast Notification --- */}
@@ -406,152 +924,290 @@ const MaterialApprovedPage = () => {
                             </button>
                         </div>
                         <div style={styles.modalBody}>
-                            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "24px" }}>
-                                <div>
-                                    <h5 style={styles.detailLabel}>Analysis ID</h5>
-                                    <p style={styles.detailValue}>{selectedAnalysisToView.analysis_id || selectedAnalysisToView._id}</p>
-                                </div>
-                                <div>
-                                    <h5 style={styles.detailLabel}>Ticket ID</h5>
-                                    <p style={styles.detailValue}>{selectedAnalysisToView.ticket_id?.ticket_id || selectedAnalysisToView.ticket_id}</p>
-                                </div>
-                                <div>
-                                    <h5 style={styles.detailLabel}>Worker Name</h5>
-                                    <p style={styles.detailValue}>{user?.name || selectedAnalysisToView.worker_name || "N/A"}</p>
-                                </div>
-                                <div>
-                                    <h5 style={styles.detailLabel}>Ticket Status</h5>
-                                    {(() => {
-                                        const ticketStatus = selectedAnalysisToView.ticket_id?.status_id?.name || selectedAnalysisToView.ticket_id?.status || "Unknown";
-                                        return (
-                                            <span style={{
-                                                display: "inline-block",
-                                                padding: "6px 12px",
-                                                borderRadius: "6px",
-                                                fontSize: "12px",
-                                                fontWeight: "700",
-                                                textTransform: "uppercase",
-                                                ...getStatusStyle(ticketStatus)
-                                            }}>
-                                                {ticketStatus}
-                                            </span>
-                                        );
-                                    })()}
-                                </div>
-                                <div>
-                                    <h5 style={styles.detailLabel}>Material Required</h5>
-                                    <p style={styles.detailValue}>{selectedAnalysisToView.material_required}</p>
+                            {/* --- Section 1: Ticket Information --- */}
+                            <div style={{ background: "#f0fdf4", padding: "20px", borderRadius: "8px", border: "1px solid #bbf7d0", marginBottom: "24px" }}>
+                                <h4 style={{ margin: "0 0 16px 0", fontSize: "16px", fontWeight: "700", color: "#166534", display: "flex", alignItems: "center", gap: "8px" }}>
+                                    🎫 Ticket Information
+                                </h4>
+                                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px" }}>
+                                    <div>
+                                        <h5 style={styles.detailLabel}>Ticket ID</h5>
+                                        <p style={styles.detailValue}>{selectedAnalysisToView.ticket_id?.ticket_id || "-"}</p>
+                                    </div>
+                                    <div>
+                                        <h5 style={styles.detailLabel}>Title</h5>
+                                        <p style={styles.detailValue}>{selectedAnalysisToView.ticket_id?.title || "-"}</p>
+                                    </div>
+                                    <div>
+                                        <h5 style={styles.detailLabel}>Department</h5>
+                                        <p style={styles.detailValue}>{selectedAnalysisToView.ticket_id?.department_id?.name || "-"}</p>
+                                    </div>
+                                    <div>
+                                        <h5 style={styles.detailLabel}>Company</h5>
+                                        <p style={styles.detailValue}>{selectedAnalysisToView.ticket_id?.company_id?.name || "-"}</p>
+                                    </div>
+                                    <div>
+                                        <h5 style={styles.detailLabel}>Location</h5>
+                                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}>
+                                            <button
+                                                className="location-link map-icon-btn"
+                                                onClick={() => openMap(selectedAnalysisToView.ticket_id?.location || selectedAnalysisToView.location || selectedAnalysisToView.ticket_location)}
+                                                title={selectedAnalysisToView.ticket_id?.location || selectedAnalysisToView.location || selectedAnalysisToView.ticket_location || 'Open in Maps'}
+                                                aria-label="Open in Maps"
+                                            >
+                                                🗺️
+                                            </button>
+                                            <div style={{ ...styles.detailValue, padding: 0, textAlign: 'left' }}>
+                                                {selectedAnalysisToView.ticket_id?.location || selectedAnalysisToView.location || selectedAnalysisToView.ticket_location || "-"}
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <h5 style={styles.detailLabel}>Priority</h5>
+                                        <p style={styles.detailValue}>{selectedAnalysisToView.ticket_id?.priority_id?.name || "-"}</p>
+                                    </div>
                                 </div>
                             </div>
-                            {selectedAnalysisToView.material_description && (
-                                <div style={{ marginTop: "24px", background: "#f8fafc", padding: "16px", borderRadius: "8px", border: "1px solid #e2e8f0" }}>
-                                    <h5 style={styles.detailLabel}>Material Description</h5>
-                                    <p style={{ margin: "8px 0 0 0", fontSize: "15px", color: "#334155", lineHeight: "1.6" }}>{selectedAnalysisToView.material_description}</p>
+
+                            {/* --- Section 2: Ticket Description --- */}
+                            {selectedAnalysisToView.ticket_id?.description && (
+                                <div style={{ background: "#f0f9ff", padding: "20px", borderRadius: "8px", border: "1px solid #bae6fd", marginBottom: "24px" }}>
+                                    <h4 style={{ margin: "0 0 12px 0", fontSize: "16px", fontWeight: "700", color: "#0c4a6e", display: "flex", alignItems: "center", gap: "8px" }}>
+                                        📝 Ticket Description
+                                    </h4>
+                                    <p style={{ margin: 0, fontSize: "14px", color: "#334155", lineHeight: "1.6" }}>
+                                        {selectedAnalysisToView.ticket_id.description}
+                                    </p>
                                 </div>
                             )}
-                            <div style={{ marginTop: "24px" }}>
-                                <h5 style={styles.detailLabel}>Uploaded Images</h5>
-                                {selectedAnalysisToView.uploaded_images && selectedAnalysisToView.uploaded_images.length > 0 ? (
-                                    <div style={{ display: "flex", gap: "12px", marginTop: "12px", flexWrap: "wrap" }}>
-                                        {selectedAnalysisToView.uploaded_images.map((img, i) => {
-                                            const normalized = img && typeof img === "string" ? img.replace(/\\/g, "/") : img;
-                                            const src = normalized && normalized.startsWith("http") ? normalized : `http://localhost:5000/${normalized}`;
-                                            return (
-                                                <img 
-                                                    key={i} 
-                                                    src={src} 
-                                                    alt={`analysis-${i}`} 
-                                                    style={{ width: "120px", height: "90px", objectFit: "cover", borderRadius: "8px", border: "1px solid #e2e8f0", boxShadow: "0 2px 4px rgba(0,0,0,0.05)" }} 
-                                                />
-                                            );
-                                        })}
+
+                            {/* --- Section 3: Analysis Details --- */}
+                            <div style={{ background: "#fef3c7", padding: "20px", borderRadius: "8px", border: "1px solid #fcd34d", marginBottom: "24px" }}>
+                                <h4 style={{ margin: "0 0 16px 0", fontSize: "16px", fontWeight: "700", color: "#92400e", display: "flex", alignItems: "center", gap: "8px" }}>
+                                    🔍 Analysis Details
+                                </h4>
+                                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px" }}>
+                                    <div>
+                                        <h5 style={styles.detailLabel}>Analysis ID</h5>
+                                        <p style={styles.detailValue}>{selectedAnalysisToView.analysis_id || selectedAnalysisToView._id}</p>
                                     </div>
-                                ) : (
-                                    <p style={{ margin: 0, fontSize: "14px", color: "#94a3b8", fontStyle: "italic" }}>No images uploaded</p>
-                                )}
-                            </div>
-                            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "24px", marginTop: "24px", borderTop: "1px solid #f1f5f9", paddingTop: "24px" }}>
-                                <div>
-                                    <h5 style={styles.detailLabel}>Analysis Status</h5>
-                                    <span style={{
-                                        display: "inline-block",
-                                        background: "#dcfce7",
-                                        color: "#166534",
-                                        padding: "6px 12px",
-                                        borderRadius: "6px",
-                                        fontSize: "12px",
-                                        fontWeight: "700",
-                                        textTransform: "uppercase"
-                                    }}>
-                                        Approved
-                                    </span>
+                                    <div>
+                                        <h5 style={styles.detailLabel}>Material Required</h5>
+                                        <p style={styles.detailValue}>{selectedAnalysisToView.material_required || "-"}</p>
+                                    </div>
+                                    <div style={{ gridColumn: "1 / -1" }}>
+                                        <h5 style={styles.detailLabel}>Material Description</h5>
+                                        <p style={{ margin: "4px 0 0 0", fontSize: "14px", color: "#334155", lineHeight: "1.5" }}>
+                                            {selectedAnalysisToView.material_description || "No description provided"}
+                                        </p>
+                                    </div>
                                 </div>
+                            </div>
+
+                            {/* --- Section 4: Status Information --- */}
+                            <div style={{ background: "#f3e8ff", padding: "20px", borderRadius: "8px", border: "1px solid #e9d5ff", marginBottom: "24px" }}>
+                                <h4 style={{ margin: "0 0 16px 0", fontSize: "16px", fontWeight: "700", color: "#6b21a8", display: "flex", alignItems: "center", gap: "8px" }}>
+                                    ✓ Status Information
+                                </h4>
+                                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "16px" }}>
+                                    <div>
+                                        <h5 style={styles.detailLabel}>Ticket Status</h5>
+                                        {(() => {
+                                            const ticketStatus = selectedAnalysisToView.ticket_id?.status_id?.name || selectedAnalysisToView.ticket_id?.status || "Unknown";
+                                            return (
+                                                <span style={{
+                                                    display: "inline-block",
+                                                    padding: "6px 12px",
+                                                    borderRadius: "6px",
+                                                    fontSize: "12px",
+                                                    fontWeight: "700",
+                                                    textTransform: "uppercase",
+                                                    ...getStatusStyle(ticketStatus)
+                                                }}>
+                                                    {ticketStatus}
+                                                </span>
+                                            );
+                                        })()}
+                                    </div>
+                                    <div>
+                                        <h5 style={styles.detailLabel}>Analysis Status</h5>
+                                        <span style={{
+                                            display: "inline-block",
+                                            background: "#dcfce7",
+                                            color: "#166534",
+                                            padding: "6px 12px",
+                                            borderRadius: "6px",
+                                            fontSize: "12px",
+                                            fontWeight: "700",
+                                            textTransform: "uppercase"
+                                        }}>
+                                            Approved
+                                        </span>
+                                    </div>
+                                    <div>
+                                        <h5 style={styles.detailLabel}>Worker Name</h5>
+                                        <p style={styles.detailValue}>{user?.name || selectedAnalysisToView.worker_name || "-"}</p>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* --- Section 5: Dates --- */}
+                            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "24px", marginBottom: "24px" }}>
                                 <div>
-                                    <h5 style={styles.detailLabel}>Submitted On</h5>
+                                    <h5 style={styles.detailLabel}>📅 Created On</h5>
                                     <p style={styles.detailValue}>
                                         {new Date(selectedAnalysisToView.created_at || selectedAnalysisToView.createdAt).toLocaleString()}
                                     </p>
                                 </div>
+                                <div>
+                                    <h5 style={styles.detailLabel}>⏱️ Last Updated</h5>
+                                    <p style={styles.detailValue}>
+                                        {new Date(selectedAnalysisToView.updated_at || selectedAnalysisToView.updatedAt).toLocaleString()}
+                                    </p>
+                                </div>
                             </div>
+
+                            {/* --- Section 6: Uploaded Images --- */}
+                            {selectedAnalysisToView.uploaded_images && selectedAnalysisToView.uploaded_images.length > 0 && (
+                                <div style={{ background: "#f8fafc", padding: "20px", borderRadius: "8px", border: "1px solid #e2e8f0" }}>
+                                    <h4 style={{ margin: "0 0 16px 0", fontSize: "16px", fontWeight: "700", color: "#0f172a", display: "flex", alignItems: "center", gap: "8px" }}>
+                                        🖼️ Uploaded Images ({selectedAnalysisToView.uploaded_images.length})
+                                    </h4>
+                                    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(140px, 1fr))", gap: "12px" }}>
+                                        {selectedAnalysisToView.uploaded_images.map((img, i) => {
+                                            const normalized = img && typeof img === "string" ? img.replace(/\\/g, "/") : img;
+                                            const src = normalized && normalized.startsWith("http") ? normalized : `${API_ENDPOINTS.BASE_URL}/${normalized}`;
+                                            return (
+                                                <div key={i} style={{ position: "relative" }}>
+                                                    <img 
+                                                        src={src} 
+                                                        alt={`analysis-${i}`} 
+                                                        style={{ 
+                                                            width: "100%", 
+                                                            height: "120px", 
+                                                            objectFit: "cover", 
+                                                            borderRadius: "8px", 
+                                                            border: "1px solid #e2e8f0", 
+                                                            boxShadow: "0 2px 4px rgba(0,0,0,0.05)",
+                                                            cursor: "pointer",
+                                                            transition: "all 0.2s"
+                                                        }}
+                                                        title={`Image ${i + 1}`}
+                                                    />
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                </div>
+                            )}
                         </div>
                     </div>
                 </div>
             )}
 
             {/* --- Edit Form Modal (Work Log) --- */}
-            {showWorkLogForm && selectedAnalysisForLog && (
-                <div style={styles.modalOverlay} onClick={() => setShowWorkLogForm(false)}>
+            {showWorkLogForm && selectedAnalysisForLog && (() => {
+                const analysisId = selectedAnalysisForLog._id;
+                const timerData = timers[analysisId] || { startTime: null, endTime: null, isRunning: false, duration: "0h 0m" };
+                
+                return (
+                <div style={styles.modalOverlay}>
                     <div style={styles.modalMedium} onClick={(e) => e.stopPropagation()}>
                         <div style={styles.modalHeader}>
                             <div>
-                                <h3 style={styles.modalTitle}>Work Log - Time Tracking</h3>
-                                <p style={{ margin: "4px 0 0 0", fontSize: "13px", color: "#64748b" }}>Ticket: <strong>{selectedAnalysisForLog.ticket_id?.ticket_id}</strong> <span style={{ marginLeft: 8 }}>| Submitting as: <strong>{user?.name || selectedAnalysisForLog.worker_name}</strong></span></p>
+                                <h3 style={styles.modalTitle}>Time Tracker - Auto Timer</h3>
+                                <p style={{ margin: "4px 0 0 0", fontSize: "13px", color: "#64748b" }}>Ticket: <strong>{selectedAnalysisForLog.ticket_id?.ticket_id}</strong> <span style={{ marginLeft: 8 }}>| Worker: <strong>{user?.name || selectedAnalysisForLog.worker_name}</strong></span></p>
                             </div>
                             <button onClick={() => setShowWorkLogForm(false)} style={styles.iconBtn}>
                                 <CloseIcon />
                             </button>
                         </div>
                         <div style={styles.modalBody}>
+                           
+
                             <div style={{ background: "#f8fafc", padding: "24px", borderRadius: "12px", marginBottom: "24px", border: "1px solid #e2e8f0" }}>
-                                <div style={{ marginBottom: "16px" }}>
-                                    <label style={styles.inputLabel}>Date</label>
-                                    <div style={{ fontSize: "15px", fontWeight: "600", color: "#0f172a", marginTop: "4px" }}>
-                                        {new Date(logFormData.date).toLocaleDateString()}
+                                {/* Timer Status Display */}
+                                <div style={{ marginBottom: "24px", padding: "16px", background: "white", borderRadius: "8px", border: "1px solid #e2e8f0", ...(timerData.isRunning ? { borderColor: "#86efac", borderWidth: "2px" } : {}) }} className={timerData.isRunning ? "timer-running-pulse" : ""}>
+                                    {timerData.isRunning && (
+                                        <div className="timer-running-glow" style={{ marginBottom: "16px", padding: "12px 16px", background: "#dcfce7", borderRadius: "6px", border: "1px solid #86efac", borderLeft: "4px solid #10b981", display: "flex", alignItems: "center", gap: "8px" }}>
+                                            <span style={{ fontSize: "20px" }}>⏱️</span>
+                                            <p style={{ margin: 0, fontSize: "13px", color: "#166534", fontWeight: "600" }}>Timer is running...</p>
+                                        </div>
+                                    )}
+                                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px", marginBottom: "16px" }}>
+                                        <div>
+                                            <p style={{ margin: "0 0 4px 0", fontSize: "12px", color: "#94a3b8", fontWeight: "600", textTransform: "uppercase" }}>Start Time</p>
+                                            <p style={{ margin: 0, fontSize: "18px", fontWeight: "700", color: timerData.startTime ? "#10b981" : "#94a3b8" }}>
+                                                {timerData.startTime ? timerData.startTime.toLocaleTimeString() : "-- : -- : --"}
+                                            </p>
+                                            <p style={{ margin: "4px 0 0 0", fontSize: "12px", color: "#64748b" }}>
+                                                {timerData.startTime ? timerData.startTime.toLocaleDateString() : "Not started"}
+                                            </p>
+                                        </div>
+                                        <div>
+                                            <p style={{ margin: "0 0 4px 0", fontSize: "12px", color: "#94a3b8", fontWeight: "600", textTransform: "uppercase" }}>End Time</p>
+                                            <p style={{ margin: 0, fontSize: "18px", fontWeight: "700", color: timerData.endTime ? "#ef4444" : "#94a3b8" }}>
+                                                {timerData.endTime ? timerData.endTime.toLocaleTimeString() : "-- : -- : --"}
+                                            </p>
+                                            <p style={{ margin: "4px 0 0 0", fontSize: "12px", color: "#64748b" }}>
+                                                {timerData.endTime ? timerData.endTime.toLocaleDateString() : "Not ended"}
+                                            </p>
+                                        </div>
                                     </div>
-                                </div>
-                                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "24px" }}>
-                                    <div>
-                                        <label style={styles.inputLabel}>From Time</label>
-                                        <input 
-                                            type="time" 
-                                            value={logFormData.fromTime}
-                                            onChange={(e) => setLogFormData({...logFormData, fromTime: e.target.value})}
-                                            style={styles.timeInput}
-                                        />
-                                    </div>
-                                    <div>
-                                        <label style={styles.inputLabel}>To Time</label>
-                                        <input 
-                                            type="time" 
-                                            value={logFormData.toTime}
-                                            onChange={(e) => setLogFormData({...logFormData, toTime: e.target.value})}
-                                            style={styles.timeInput}
-                                        />
-                                    </div>
-                                </div>
-                                {logFormData.fromTime && logFormData.toTime && (
-                                    <div style={{ marginTop: "16px", padding: "12px", background: "white", borderRadius: "8px", borderLeft: "4px solid #3b82f6", boxShadow: "0 2px 4px rgba(0,0,0,0.03)" }}>
-                                        <p style={{ margin: 0, fontSize: "14px", color: "#0f172a" }}>
-                                            <span style={{ color: "#64748b", marginRight: "8px" }}>Calculated Duration:</span>
-                                            <strong style={{ color: "#2563eb" }}>{calculateDuration(logFormData.fromTime, logFormData.toTime)}</strong>
+
+                                    {/* Duration Display */}
+                                    <div style={{ padding: "12px 16px", background: "#eff6ff", borderRadius: "6px", border: "1px solid #bfdbfe", borderLeft: "4px solid #3b82f6" }}>
+                                        <p style={{ margin: 0, fontSize: "13px", color: "#0c4a6e" }}>
+                                            <span style={{ fontWeight: "600" }}>Total Duration:</span>
+                                            <span style={{ marginLeft: "8px", fontSize: "16px", fontWeight: "700", color: "#2563eb" }}>{timerData.duration}</span>
                                         </p>
                                     </div>
-                                )}
+                                </div>
+
+                                {/* Control Buttons */}
+                                <div style={{ display: "flex", gap: "12px", justifyContent: "center" }}>
+                                    {!timerData.startTime ? (
+                                        // No timer started yet: Show Start button
+                                        <button 
+                                            onClick={handleStartTimer}
+                                            style={{
+                                                ...styles.btnPrimary,
+                                                flex: 1,
+                                                padding: "14px 24px",
+                                                fontSize: "15px",
+                                                display: "flex",
+                                                alignItems: "center",
+                                                justifyContent: "center",
+                                                gap: "8px",
+                                                background: "#10b981",
+                                            }}>
+                                            <span style={{ fontSize: "20px" }}>▶</span>
+                                            Start Timer
+                                        </button>
+                                    ) : !timerData.endTime ? (
+                                        // Timer running: Show End button
+                                        <button 
+                                            onClick={handleEndTimer}
+                                            style={{
+                                                ...styles.btnPrimary,
+                                                flex: 1,
+                                                padding: "14px 24px",
+                                                fontSize: "15px",
+                                                display: "flex",
+                                                alignItems: "center",
+                                                justifyContent: "center",
+                                                gap: "8px",
+                                                background: "#ef4444",
+                                            }}>
+                                            <span style={{ fontSize: "20px" }}>⏹</span>
+                                            End Timer
+                                        </button>
+                                    ) : null}
+                                </div>
                             </div>
+
+                            {/* Cancel Button */}
                             <div style={{ display: "flex", gap: "12px", justifyContent: "flex-end" }}>
-                                <button onClick={() => handleSubmitWorkLog()} style={styles.btnPrimary}>
-                                    Submit Work Log & Update Status
-                                </button>
                                 <button onClick={() => setShowWorkLogForm(false)} style={styles.btnSecondary}>
                                     Cancel
                                 </button>
@@ -559,7 +1215,8 @@ const MaterialApprovedPage = () => {
                         </div>
                     </div>
                 </div>
-            )}
+                );
+            })()}
 
             {/* --- View Work Log Modal --- */}
             {showViewLog && selectedAnalysisForLog && (
@@ -585,88 +1242,276 @@ const MaterialApprovedPage = () => {
                                     <p style={{ color: "#64748b", fontSize: "14px" }}>No work logs submitted yet</p>
                                 </div>
                             ) : (
-                                <div style={{ overflowX: "auto" }}>
-                                    <table style={styles.logTable}>
-                                        <thead>
-                                            <tr>
-                                                <th style={styles.logTh}>Worker</th>
-                                                <th style={styles.logTh}>Time Range</th>
-                                                <th style={styles.logTh}>Duration</th>
-                                                <th style={styles.logTh}>Date</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody>
-                                            {workLogs.map((log, idx) => (
-                                                <tr key={idx} style={idx % 2 === 0 ? styles.logTrEven : styles.logTrOdd}>
-                                                    <td style={styles.logTd}>
-                                                        <div style={{ fontWeight: "600", color: "#0f172a" }}>{log.worker_name}</div>
-                                                    </td>
-                                                    <td style={styles.logTd}>
-                                                        {log.from_time} - {log.to_time}
-                                                    </td>
-                                                    <td style={styles.logTd}>
-                                                        <span style={{ background: "#eff6ff", color: "#2563eb", padding: "2px 8px", borderRadius: "4px", fontSize: "12px", fontWeight: "700" }}>
-                                                            {log.duration}
-                                                        </span>
-                                                    </td>
-                                                    <td style={styles.logTd}>
-                                                        {new Date(log.log_date).toLocaleDateString()}
-                                                    </td>
-                                                </tr>
-                                            ))}
-                                        </tbody>
-                                    </table>
-                                </div>
+                                (() => {
+                                    // Filter logs for the current logged-in user (case-insensitive, trimmed comparison)
+                                    const currentUserName = (user?.name || "").toLowerCase().trim();
+                                    const filteredLogs = workLogs.filter(l => 
+                                        (l.worker_name || "").toLowerCase().trim() === currentUserName ||
+                                        String(l.worker_id || "") === String(user?.id || "")
+                                    );
+
+                                    // Aggregate per-day totals and calculate overall seconds
+                                    const dayTotals = {};
+                                    let overallSeconds = 0;
+                                    const durationRegex = /(\d+)h\s*(\d+)m\s*(\d+)s/i;
+                                    
+                                    filteredLogs.forEach(log => {
+                                        const durationStr = String(log.duration || "").trim();
+                                        const parts = durationStr.match(durationRegex);
+                                        let secs = 0;
+                                        if (parts && parts.length >= 4) {
+                                            const h = parseInt(parts[1]) || 0;
+                                            const m = parseInt(parts[2]) || 0;
+                                            const s = parseInt(parts[3]) || 0;
+                                            secs = h * 3600 + m * 60 + s;
+                                        }
+                                        const dateKey = new Date(log.log_date).toLocaleDateString();
+                                        dayTotals[dateKey] = (dayTotals[dateKey] || 0) + secs;
+                                        overallSeconds += secs;
+                                    });
+
+                                    const formatSecs = (secs) => {
+                                        const h = Math.floor(secs / 3600);
+                                        const m = Math.floor((secs % 3600) / 60);
+                                        const s = secs % 60;
+                                        return `${h}h ${m}m ${s}s`;
+                                    };
+
+                                    return (
+                                        <div>
+                                            {/* Header: User name and overall total */}
+                                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px", paddingBottom: "12px", borderBottom: "1px solid #e2e8f0" }}>
+                                                <div>
+                                                    <div style={{ fontSize: "12px", color: "#0f172a", fontWeight: 700, textTransform: "uppercase" }}>Showing records for:</div>
+                                                    <div style={{ fontSize: "15px", color: "#0f172a", fontWeight: 800 }}>{user?.name || "You"}</div>
+                                                </div>
+                                                <div style={{ textAlign: "right" }}>
+                                                    <div style={{ fontSize: "12px", color: "#0f172a", fontWeight: 700, textTransform: "uppercase" }}>Total Time</div>
+                                                    <div style={{ fontSize: "16px", color: "#10b981", fontWeight: 800, fontFamily: "'JetBrains Mono', monospace" }}>{formatSecs(overallSeconds)}</div>
+                                                </div>
+                                            </div>
+
+                                            {/* Per-day breakdown */}
+                                            {Object.keys(dayTotals).length > 0 && (
+                                                <div style={{ marginBottom: "16px", background: "#f8fafc", padding: "12px", borderRadius: "8px" }}>
+                                                    <div style={{ fontSize: "12px", color: "#475569", fontWeight: 700, marginBottom: "8px", textTransform: "uppercase" }}>📅 Per-Day Breakdown</div>
+                                                    {Object.entries(dayTotals).map(([date, secs]) => (
+                                                        <div key={date} style={{ display: "flex", justifyContent: "space-between", padding: "6px 8px", marginBottom: "4px", background: "white", borderRadius: "4px", fontSize: "13px" }}>
+                                                            <div style={{ color: "#0f172a", fontWeight: 600 }}>{date}</div>
+                                                            <div style={{ color: "#10b981", fontWeight: 700, fontFamily: "'JetBrains Mono', monospace" }}>{formatSecs(secs)}</div>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            )}
+
+                                            {/* Work logs table */}
+                                            <div style={{ overflowX: "auto" }}>
+                                                <table style={styles.logTable}>
+                                                    <thead>
+                                                        <tr>
+                                                            <th style={styles.logTh}>Time Range</th>
+                                                            <th style={styles.logTh}>Duration</th>
+                                                            <th style={styles.logTh}>Date</th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody>
+                                                        {filteredLogs.length === 0 ? (
+                                                            <tr>
+                                                                <td colSpan={3} style={{ padding: "20px", textAlign: "center", color: "#64748b", fontSize: "14px" }}>
+                                                                    No work logs for you on this ticket
+                                                                </td>
+                                                            </tr>
+                                                        ) : (
+                                                            filteredLogs.map((log, idx) => (
+                                                                <tr key={idx} style={idx % 2 === 0 ? styles.logTrEven : styles.logTrOdd}>
+                                                                    <td style={styles.logTd}>
+                                                                        <div style={{ fontSize: "13px", color: "#0f172a" }}>{log.from_time} - {log.to_time}</div>
+                                                                    </td>
+                                                                    <td style={styles.logTd}>
+                                                                        <span style={{ background: "#eff6ff", color: "#2563eb", padding: "4px 8px", borderRadius: "4px", fontSize: "12px", fontWeight: "700", fontFamily: "'JetBrains Mono', monospace" }}>
+                                                                            {log.duration}
+                                                                        </span>
+                                                                    </td>
+                                                                    <td style={styles.logTd}>
+                                                                        <div style={{ fontSize: "13px", color: "#0f172a" }}>{new Date(log.log_date).toLocaleDateString()}</div>
+                                                                    </td>
+                                                                </tr>
+                                                            ))
+                                                        )}
+                                                    </tbody>
+                                                </table>
+                                            </div>
+                                        </div>
+                                    );
+                                })()
                             )}
                         </div>
                     </div>
                 </div>
             )}
          
-            {/* --- Search Bar --- */}
-            <div style={styles.searchWrapper}>
-                <div style={styles.searchInputWrapper}>
-                    <span style={styles.searchIcon}>
-                        <SearchIcon />
-                    </span>
-                    <input
-                        type="text"
-                        placeholder="Search by analysis ID, ticket ID, or description..."
-                        value={searchTerm}
-                        onChange={(e) => setSearchTerm(e.target.value)}
-                        style={styles.searchInput}
-                    />
-                </div>
-            </div>
-
             {/* --- Analysis Cards --- */}
             <div style={styles.cardContainer}>
                 {filteredAnalyses.length === 0 ? (
                     <div style={styles.emptyState}>
                         <div style={styles.emptyIcon}>📊</div>
-                        <h3 style={styles.emptyTitle}>No Material Approved Records</h3>
-                        <p style={styles.emptyText}>
-                            {searchTerm
-                                ? "Try adjusting your search terms"
-                                : "No analyses with approved materials found"}
-                        </p>
+                        <h3 style={styles.emptyTitle}>No Material Approved Tickets</h3>
+                       
                     </div>
                 ) : (
                     <div style={styles.cardGrid}>
                         {filteredAnalyses.map((analysis) => {
                             const statusName = analysis.ticket_id?.status_id?.name || analysis.ticket_id?.status;
                             const statusStyles = getStatusStyle(statusName);
+                            const timerData = timers[analysis._id];
+                            const hasRunningTimer = timerData?.isRunning;
+                            const hasStoppedTimer = timerData && !timerData.isRunning && timerData.startTime && timerData.endTime;
                             
                             return (
-                                <div key={analysis._id} style={styles.cardItem}>
+                                <div key={analysis._id} style={styles.cardItem} className={hasRunningTimer ? "card-timer-active" : hasStoppedTimer ? "card-timer-stopped" : ""}>
                                     <div style={styles.cardHeader}>
                                         <div style={styles.cardIdRow}>
-                                            <div style={styles.cardIdBox}>
-                                                <FileTextIcon />
-                                                <span style={styles.cardId}>{analysis.analysis_id}</span>
+                                          
+                                                                                    {/* Title and Location - Professional Design */}
+                                        <button
+  className="location-link"
+  onClick={() => openMap(analysis.ticket_id?.location || analysis.location || analysis.ticket_location || analysis.ticket_id?.title)}
+  style={{
+    marginTop: "14px",
+    background: "linear-gradient(135deg, #f0fdf4 0%, #f8fafc 100%)",
+    border: "1px solid #d1fae5",
+    padding: "16px",
+    borderRadius: "10px",
+    cursor: "pointer",
+    transition: "all 0.3s ease",
+    textAlign: "left",
+    width: hasRunningTimer ? "40%" : "70%",
+    boxShadow: "0 1px 3px rgba(16, 185, 129, 0.08)"
+  }}
+  onMouseEnter={e => {
+    e.currentTarget.style.background = "linear-gradient(135deg, #dcfce7 0%, #f0fdf4 100%)";
+    e.currentTarget.style.boxShadow = "0 4px 12px rgba(16, 185, 129, 0.15)";
+    e.currentTarget.style.transform = "translateY(-2px)";
+  }}
+  onMouseLeave={e => {
+    e.currentTarget.style.background = "linear-gradient(135deg, #f0fdf4 0%, #f8fafc 100%)";
+    e.currentTarget.style.boxShadow = "0 1px 3px rgba(16, 185, 129, 0.08)";
+    e.currentTarget.style.transform = "translateY(0)";
+  }}
+  title="Click to view in maps"
+>
+  {/* Title Row */}
+  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "14px", paddingBottom: "14px", borderBottom: "1.5px solid #bbf7d0" }}>
+    <span style={{ 
+      fontSize: "12px", 
+      fontWeight: "700", 
+      color: "#10b981", 
+      textTransform: "uppercase",
+      letterSpacing: "0.5px",
+      display: "flex",
+      alignItems: "center",
+      gap: "6px"
+    }}>
+      <span>🗺️</span>
+      Title
+    </span>
+    <span style={{ fontSize: "13px", fontWeight: "600", color: "#0f172a", maxWidth: "65%", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", textAlign: "right" }} title={analysis.ticket_id?.title}>
+      {analysis.ticket_id?.title || "-"}
+    </span>
+  </div>
+
+  {/* Location Row */}
+  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+    <span style={{ 
+      fontSize: "12px", 
+      fontWeight: "700", 
+      color: "#10b981", 
+      textTransform: "uppercase",
+      letterSpacing: "0.5px",
+      display: "flex",
+      alignItems: "center",
+      gap: "6px",
+      paddingRight:"2px"
+    }}>
+      <span>📍</span>
+      Location:
+    </span>
+    <span style={{ fontSize: "13px", fontWeight: "600", color: "#0f172a", maxWidth: "65%", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", textAlign: "right" }} title={analysis.ticket_id?.location || analysis.location || analysis.ticket_location}>
+      {analysis.ticket_id?.location || analysis.location || analysis.ticket_location || "-"}
+    </span>
+  </div>
+</button>
+                                            <div style={{ display: "flex", gap: "8px", alignItems: "center", flexDirection: "column" }}>
+                                                {hasRunningTimer && (
+                                                    <div style={{ 
+                                                        display: "flex",
+                                                        flexDirection: "column",
+                                                        alignItems: "center",
+                                                        gap: "6px",
+                                                        padding: "8px 12px", 
+                                                        background: "#dcfce7", 
+                                                        color: "#166534",
+                                                        borderRadius: "6px",
+                                                        fontSize: "11px",
+                                                        fontWeight: "600",
+                                                        animation: "badgeTimerRunning 1.5s infinite",
+                                                        border: "1px solid #10b981"
+                                                    }}>
+                                                        <div style={{ fontSize: "12px", display: "flex", alignItems: "center", gap: "4px" }}>
+                                                            <span>⏱️</span>
+                                                            RUNNING
+                                                        </div>
+                                                        <div style={{ 
+                                                            fontSize: "13px", 
+                                                            fontWeight: "700",
+                                                            fontFamily: "'JetBrains Mono', monospace",
+                                                            color: "#065f46"
+                                                        }}>
+                                                            {currentTime.toLocaleTimeString()}
+                                                        </div>
+                                                    </div>
+                                                )}
+                                            
                                             </div>
-                                            <span style={{ ...styles.badge, background: "#dcfce7", color: "#166534" }}>Approved</span>
                                         </div>
+                                        
+                                        {/* Timer Display on Right Side - Static Duration Only */}
+                                        {hasStoppedTimer && (
+                                            <div style={{
+                                                display: "flex",
+                                                flexDirection: "column",
+                                                alignItems: "center",
+                                                justifyContent: "center",
+                                                padding: "12px 16px",
+                                                background: "linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%)",
+                                                borderRadius: "8px",
+                                                border: "2px solid #3b82f6",
+                                                boxShadow: "0 0 10px rgba(59, 130, 246, 0.3)"
+                                            }}>
+                                                <div style={{
+                                                    fontSize: "20px",
+                                                    fontWeight: "800",
+                                                    color: "#1e40af",
+                                                    fontFamily: "'JetBrains Mono', monospace"
+                                                }}>
+                                                    {timerData.duration || "0h 0m"}
+                                                </div>
+                                                <div style={{
+                                                    fontSize: "11px",
+                                                    fontWeight: "700",
+                                                    color: "#1e3a8a",
+                                                    marginTop: "4px",
+                                                    textTransform: "uppercase",
+                                                    letterSpacing: "0.5px"
+                                                }}>
+                                                    ⏱️ DURATION
+                                                </div>
+                                            </div>
+                                        )}
+                                        
+
+
+
                                     </div>
                                     <div style={styles.cardBody}>
                                         <div style={styles.cardInfoGrid}>
@@ -706,9 +1551,30 @@ const MaterialApprovedPage = () => {
                                                 <span style={styles.label}>Images ({analysis.uploaded_images.length})</span>
                                             </div>
                                         )}
+                                        
+                                        {/* Total Logged Time for this Ticket - ALL USERS */}
+                                        <div style={{
+                                            marginTop: "16px",
+                                            padding: "12px 14px",
+                                            background: "linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%)",
+                                            borderRadius: "8px",
+                                            border: "1px solid #3b82f6",
+                                            display: "flex",
+                                            alignItems: "center",
+                                            justifyContent: "space-between"
+                                        }}>
+                                            <div>
+                                                <div style={{ fontSize: "11px", fontWeight: "700", color: "#1e40af", textTransform: "uppercase", letterSpacing: "0.5px" }}>
+                                                    ⏱️ Total Time (You)
+                                                </div>
+                                                <div style={{ fontSize: "16px", fontWeight: "800", color: "#1e3a8a", fontFamily: "'JetBrains Mono', monospace", marginTop: "2px" }}>
+                                                    {calculateTicketTotalTime(analysis._id)}
+                                                </div>
+                                            </div>
+                                        </div>
                                     </div>
                                     <div style={styles.cardFooter}>
-                                        <button onClick={() => setSelectedAnalysisToView(analysis)} style={styles.btnOutline}>
+                                        <button onClick={() => handleViewAnalysisDetails(analysis)} style={styles.btnOutline}>
                                             View Details
                                         </button>
                                         <button 
@@ -735,7 +1601,7 @@ const MaterialApprovedPage = () => {
                                             onClick={() => handleCompleteWork(analysis)} 
                                             style={styles.btnSuccess}>
                                             <CheckCircleIcon />
-                                            <span>Complete</span>
+                                            <span>Mark as Complete</span>
                                         </button>
                                     </div>
                                 </div>
@@ -744,9 +1610,493 @@ const MaterialApprovedPage = () => {
                     </div>
                 )}
             </div>
+
+            {/* --- Complete Work Modal --- */}
+            {showCompleteWorkModal && selectedAnalysisForCompletion && (
+                <div style={styles.modalOverlay}>
+                    <div style={styles.modalMedium} onClick={(e) => e.stopPropagation()}>
+                        <div style={styles.modalHeader}>
+                            <div>
+                                <h3 style={styles.modalTitle}>Complete Work</h3>
+                                <p style={{ margin: "4px 0 0 0", fontSize: "13px", color: "#64748b" }}>
+                                    Ticket: <strong>{selectedAnalysisForCompletion.ticket_id?.ticket_id}</strong>
+                                </p>
+                            </div>
+                            <button onClick={() => setShowCompleteWorkModal(false)} style={styles.iconBtn}>
+                                <CloseIcon />
+                            </button>
+                        </div>
+                        <div style={styles.modalBody}>
+                            <div style={{ background: "#f8fafc", padding: "24px", borderRadius: "12px", marginBottom: "24px", border: "1px solid #e2e8f0" }}>
+                                {/* Worker Name Display */}
+                                <div style={{ marginBottom: "20px" }}>
+                                    <label style={styles.inputLabel}>Worker Name</label>
+                                    <div style={{ 
+                                        fontSize: "15px", 
+                                        fontWeight: "600", 
+                                        color: "#0f172a", 
+                                        marginTop: "4px",
+                                        padding: "12px",
+                                        background: "white",
+                                        borderRadius: "6px",
+                                        border: "1px solid #e2e8f0"
+                                    }}>
+                                        {user?.name || selectedAnalysisForCompletion.worker_name || "Unknown"}
+                                    </div>
+                                </div>
+
+                                {/* Image Upload */}
+                                <div>
+                                    <label style={styles.inputLabel}>Upload Completion Images (Optional)</label>
+                                    
+                                    {/* Single Camera Button with Menu */}
+                                    <div style={{ position: "relative", marginBottom: "16px" }}>
+                                        <div style={{
+                                            padding: "16px",
+                                            border: "2px dashed #cbd5e1",
+                                            borderRadius: "8px",
+                                            textAlign: "center",
+                                            background: "white",
+                                            cursor: "pointer",
+                                            transition: "all 0.2s",
+                                        }} onClick={handleOpenCamera}>
+                                            <div style={{ cursor: "pointer", pointerEvents: "none" }}>
+                                                <p style={{ margin: "0 0 6px 0", fontSize: "24px" }}>📷</p>
+                                                <p style={{ margin: "0 0 4px 0", fontSize: "13px", color: "#64748b", fontWeight: "600" }}>
+                                                    Take Photo / Choose Device
+                                                </p>
+                                                <p style={{ margin: 0, fontSize: "11px", color: "#94a3b8" }}>
+                                                    Click to select camera or gallery
+                                                </p>
+                                            </div>
+                                        </div>
+
+                                        {/* Camera Menu Dropdown */}
+                                        {showCameraMenu && (
+                                            <div style={{
+                                                position: "absolute",
+                                                top: "100%",
+                                                left: 0,
+                                                right: 0,
+                                                marginTop: "8px",
+                                                background: "white",
+                                                borderRadius: "8px",
+                                                boxShadow: "0 10px 25px rgba(0,0,0,0.15)",
+                                                border: "1px solid #e2e8f0",
+                                                zIndex: 1000,
+                                                overflow: "hidden"
+                                            }}>
+                                                {/* Gallery Option */}
+                                                <button 
+                                                    onClick={handleOpenGallery}
+                                                    style={{
+                                                        width: "100%",
+                                                        padding: "12px 16px",
+                                                        border: "none",
+                                                        background: "transparent",
+                                                        textAlign: "left",
+                                                        cursor: "pointer",
+                                                        borderBottom: "1px solid #e2e8f0",
+                                                        transition: "all 0.2s",
+                                                        display: "flex",
+                                                        alignItems: "center",
+                                                        gap: "12px",
+                                                        fontSize: "14px",
+                                                        color: "#1e293b"
+                                                    }}
+                                                    onMouseEnter={(e) => e.target.style.background = "#f8fafc"}
+                                                    onMouseLeave={(e) => e.target.style.background = "transparent"}
+                                                >
+                                                    <span style={{ fontSize: "18px" }}>🗂️</span>
+                                                    <div>
+                                                        <p style={{ margin: 0, fontWeight: "600" }}>Gallery</p>
+                                                        <p style={{ margin: "2px 0 0 0", fontSize: "12px", color: "#64748b" }}>Multiple files</p>
+                                                    </div>
+                                                </button>
+
+                                                {/* Rear Camera Option */}
+                                                <button 
+                                                    onClick={handleOpenRearCamera}
+                                                    style={{
+                                                        width: "100%",
+                                                        padding: "12px 16px",
+                                                        border: "none",
+                                                        background: "transparent",
+                                                        textAlign: "left",
+                                                        cursor: "pointer",
+                                                        borderBottom: "1px solid #e2e8f0",
+                                                        transition: "all 0.2s",
+                                                        display: "flex",
+                                                        alignItems: "center",
+                                                        gap: "12px",
+                                                        fontSize: "14px",
+                                                        color: "#1e293b"
+                                                    }}
+                                                    onMouseEnter={(e) => e.target.style.background = "#f8fafc"}
+                                                    onMouseLeave={(e) => e.target.style.background = "transparent"}
+                                                >
+                                                    <span style={{ fontSize: "18px" }}>📷</span>
+                                                    <div>
+                                                        <p style={{ margin: 0, fontWeight: "600" }}>Rear Camera</p>
+                                                        <p style={{ margin: "2px 0 0 0", fontSize: "12px", color: "#64748b" }}>Back camera (Mobile)</p>
+                                                    </div>
+                                                </button>
+
+                                                {/* Front Camera Option */}
+                                                <button 
+                                                    onClick={handleOpenFrontCamera}
+                                                    style={{
+                                                        width: "100%",
+                                                        padding: "12px 16px",
+                                                        border: "none",
+                                                        background: "transparent",
+                                                        textAlign: "left",
+                                                        cursor: "pointer",
+                                                        borderBottom: "1px solid #e2e8f0",
+                                                        transition: "all 0.2s",
+                                                        display: "flex",
+                                                        alignItems: "center",
+                                                        gap: "12px",
+                                                        fontSize: "14px",
+                                                        color: "#1e293b"
+                                                    }}
+                                                    onMouseEnter={(e) => e.target.style.background = "#f8fafc"}
+                                                    onMouseLeave={(e) => e.target.style.background = "transparent"}
+                                                >
+                                                    <span style={{ fontSize: "18px" }}>🤳</span>
+                                                    <div>
+                                                        <p style={{ margin: 0, fontWeight: "600" }}>Front Camera</p>
+                                                        <p style={{ margin: "2px 0 0 0", fontSize: "12px", color: "#64748b" }}>Selfie camera (Mobile)</p>
+                                                    </div>
+                                                </button>
+
+                                                {/* Desktop Webcam Option */}
+                                                <button 
+                                                    onClick={handleOpenDesktopWebcam}
+                                                    style={{
+                                                        width: "100%",
+                                                        padding: "12px 16px",
+                                                        border: "none",
+                                                        background: "transparent",
+                                                        textAlign: "left",
+                                                        cursor: "pointer",
+                                                        transition: "all 0.2s",
+                                                        display: "flex",
+                                                        alignItems: "center",
+                                                        gap: "12px",
+                                                        fontSize: "14px",
+                                                        color: "#1e293b"
+                                                    }}
+                                                    onMouseEnter={(e) => e.target.style.background = "#f8fafc"}
+                                                    onMouseLeave={(e) => e.target.style.background = "transparent"}
+                                                >
+                                                    <span style={{ fontSize: "18px" }}>💻</span>
+                                                    <div>
+                                                        <p style={{ margin: 0, fontWeight: "600" }}>Desktop Webcam</p>
+                                                        <p style={{ margin: "2px 0 0 0", fontSize: "12px", color: "#64748b" }}>Computer camera</p>
+                                                    </div>
+                                                </button>
+                                            </div>
+                                        )}
+
+                                        {/* Hidden Input Elements */}
+                                        <input 
+                                            type="file" 
+                                            multiple
+                                            accept="image/*"
+                                            onChange={handleCompleteWorkImageChange}
+                                            style={{ display: "none" }}
+                                            id="cameraInputGallery"
+                                        />
+                                        <input 
+                                            type="file" 
+                                            accept="image/*"
+                                            capture="environment"
+                                            onChange={handleCompleteWorkImageChange}
+                                            style={{ display: "none" }}
+                                            id="cameraInputRear"
+                                        />
+                                        <input 
+                                            type="file" 
+                                            accept="image/*"
+                                            capture="user"
+                                            onChange={handleCompleteWorkImageChange}
+                                            style={{ display: "none" }}
+                                            id="cameraInputFront"
+                                        />
+                                    </div>
+
+                                    {/* Close menu when clicking outside */}
+                                    {showCameraMenu && (
+                                        <div 
+                                            style={{
+                                                position: "fixed",
+                                                top: 0,
+                                                left: 0,
+                                                right: 0,
+                                                bottom: 0,
+                                                zIndex: 999
+                                            }}
+                                            onClick={() => setShowCameraMenu(false)}
+                                        />
+                                    )}
+
+                                    {/* Image Previews */}
+                                    {completeWorkImagePreviews.length > 0 && (
+                                        <div style={{ marginTop: "16px" }}>
+                                            <p style={{ margin: "0 0 12px 0", fontSize: "12px", color: "#94a3b8", fontWeight: "600", textTransform: "uppercase" }}>
+                                                Selected Images ({completeWorkImagePreviews.length})
+                                            </p>
+                                            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(100px, 1fr))", gap: "12px" }}>
+                                                {completeWorkImagePreviews.map((preview, idx) => (
+                                                    <div key={idx} style={{ position: "relative" }}>
+                                                        <img 
+                                                            src={preview} 
+                                                            alt={`preview-${idx}`}
+                                                            style={{ 
+                                                                width: "100%", 
+                                                                height: "100px", 
+                                                                objectFit: "cover", 
+                                                                borderRadius: "6px",
+                                                                border: "1px solid #e2e8f0"
+                                                            }}
+                                                        />
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+
+                            {/* Submit and Cancel Buttons */}
+                            <div style={{ display: "flex", gap: "12px", justifyContent: "flex-end" }}>
+                                <button 
+                                    onClick={() => handleSubmitCompleteWork()}
+                                    style={{
+                                        ...styles.btnPrimary,
+                                        background: "#10b981",
+                                    }}>
+                                    Mark as Complete
+                                </button>
+                                <button 
+                                    onClick={() => {
+                                        setShowCompleteWorkModal(false);
+                                        setCompleteWorkImages([]);
+                                        setCompleteWorkImagePreviews([]);
+                                    }}
+                                    style={styles.btnSecondary}>
+                                    Cancel
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* --- Desktop Webcam Modal --- */}
+            {showWebcamModal && (
+                <div style={styles.modalOverlay} onClick={stopWebcam}>
+                    <div style={styles.modalLarge} onClick={(e) => e.stopPropagation()}>
+                        <div style={styles.modalHeader}>
+                            <h3 style={styles.modalTitle}>Desktop Webcam</h3>
+                            <button onClick={stopWebcam} style={styles.iconBtn}>
+                                <CloseIcon />
+                            </button>
+                        </div>
+                        <div style={styles.modalBody}>
+                            <div style={{ background: "#000", borderRadius: "12px", overflow: "hidden", marginBottom: "20px" }}>
+                                <video 
+                                    ref={videoRef}
+                                    autoPlay
+                                    playsInline
+                                    style={{ width: "100%", display: "block" }}
+                                />
+                            </div>
+                            <canvas 
+                                ref={canvasRef}
+                                style={{ display: "none" }}
+                            />
+                            
+                            <div style={{ background: "#f0fdf4", padding: "16px", borderRadius: "8px", marginBottom: "20px", border: "1px solid #bbf7d0" }}>
+                                <p style={{ margin: 0, fontSize: "14px", color: "#166534" }}>
+                                    📸 Position yourself in frame and click "Capture Photo"
+                                </p>
+                            </div>
+
+                            <div style={{ display: "flex", gap: "12px", justifyContent: "center", marginBottom: "20px" }}>
+                                <button 
+                                    onClick={captureWebcamPhoto}
+                                    style={{
+                                        padding: "12px 24px",
+                                        background: "#10b981",
+                                        color: "white",
+                                        border: "none",
+                                        borderRadius: "8px",
+                                        cursor: "pointer",
+                                        fontWeight: "600",
+                                        fontSize: "14px",
+                                        transition: "all 0.2s"
+                                    }}
+                                    onMouseEnter={(e) => e.target.style.background = "#059669"}
+                                    onMouseLeave={(e) => e.target.style.background = "#10b981"}
+                                >
+                                    📸 Capture Photo
+                                </button>
+                                <button 
+                                    onClick={stopWebcam}
+                                    style={{
+                                        padding: "12px 24px",
+                                        background: "#ef4444",
+                                        color: "white",
+                                        border: "none",
+                                        borderRadius: "8px",
+                                        cursor: "pointer",
+                                        fontWeight: "600",
+                                        fontSize: "14px",
+                                        transition: "all 0.2s"
+                                    }}
+                                    onMouseEnter={(e) => e.target.style.background = "#dc2626"}
+                                    onMouseLeave={(e) => e.target.style.background = "#ef4444"}
+                                >
+                                    🛑 Close Camera
+                                </button>
+                            </div>
+
+                            {/* Captured Photos Preview */}
+                            {completeWorkImagePreviews.length > 0 && (
+                                <div style={{ background: "#f8fafc", padding: "20px", borderRadius: "12px", border: "1px solid #e2e8f0" }}>
+                                    <h4 style={{ margin: "0 0 16px 0", fontSize: "15px", fontWeight: "700", color: "#0f172a" }}>
+                                        ✅ Captured Photos ({completeWorkImagePreviews.length})
+                                    </h4>
+                                    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(120px, 1fr))", gap: "12px" }}>
+                                        {completeWorkImagePreviews.map((preview, idx) => (
+                                            <div key={idx} style={{ position: "relative" }}>
+                                                <img 
+                                                    src={preview} 
+                                                    alt={`capture-${idx}`}
+                                                    style={{ 
+                                                        width: "100%", 
+                                                        height: "120px", 
+                                                        objectFit: "cover", 
+                                                        borderRadius: "8px",
+                                                        border: "2px solid #10b981",
+                                                        boxShadow: "0 2px 8px rgba(16, 185, 129, 0.2)"
+                                                    }}
+                                                />
+                                                <div style={{
+                                                    position: "absolute",
+                                                    top: "4px",
+                                                    right: "4px",
+                                                    background: "#10b981",
+                                                    color: "white",
+                                                    width: "24px",
+                                                    height: "24px",
+                                                    borderRadius: "50%",
+                                                    display: "flex",
+                                                    alignItems: "center",
+                                                    justifyContent: "center",
+                                                    fontSize: "12px",
+                                                    fontWeight: "700"
+                                                }}>
+                                                    ✓
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
-    );
-};
+   );
+}
+
+// --- CSS Animations ---
+const timerAnimationStyles = `
+  @keyframes timerPulse {
+    0% {
+      box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7);
+    }
+    70% {
+      box-shadow: 0 0 0 10px rgba(16, 185, 129, 0);
+    }
+    100% {
+      box-shadow: 0 0 0 0 rgba(16, 185, 129, 0);
+    }
+  }
+
+  @keyframes timerGlow {
+    0% {
+      background: #dcfce7;
+    }
+    50% {
+      background: #c1fae8;
+    }
+    100% {
+      background: #dcfce7;
+    }
+  }
+
+  @keyframes cardTimerRunning {
+    0% {
+      box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.4);
+    }
+    50% {
+      box-shadow: 0 0 0 8px rgba(16, 185, 129, 0.1);
+    }
+    100% {
+      box-shadow: 0 0 0 0 rgba(16, 185, 129, 0);
+    }
+  }
+
+  @keyframes cardTimerStopped {
+    0%, 100% {
+      box-shadow: 0 4px 12px rgba(239, 68, 68, 0.2);
+    }
+    50% {
+      box-shadow: 0 4px 20px rgba(239, 68, 68, 0.4);
+    }
+  }
+
+  @keyframes badgeTimerRunning {
+    0%, 100% {
+      transform: scale(1);
+    }
+    50% {
+      transform: scale(1.05);
+    }
+  }
+
+  .timer-running-pulse {
+    animation: timerPulse 2s infinite;
+  }
+
+  .timer-running-glow {
+    animation: timerGlow 2s infinite;
+  }
+
+  .card-timer-active {
+    animation: cardTimerRunning 2.5s infinite;
+  }
+
+  .card-timer-stopped {
+    animation: cardTimerStopped 1.5s infinite;
+  }
+
+  .badge-timer-active {
+    animation: badgeTimerRunning 1.5s infinite;
+  }
+`;
+
+// Inject styles
+if (typeof document !== 'undefined') {
+    const style = document.createElement('style');
+    style.textContent = timerAnimationStyles;
+    document.head.appendChild(style);
+}
 
 // --- Styles ---
 const styles = {
@@ -756,15 +2106,15 @@ const styles = {
         minHeight: "100vh",
         padding: "32px",
         color: "#1e293b",
-        width: "100%",
-        transform: "scale(0.65)",
-        transformOrigin: "top left",
+     
     },
     headerSection: {
-        display: "flex",
-        justifyContent: "space-between",
+     display: "flex",
         alignItems: "center",
-        marginBottom: "32px",
+    flexWrap: "wrap",
+        gap: "16px",
+    justifyContent: "flex-start",
+    marginBottom: "24px",
     },
     pageTitle: {
         margin: "0 0 4px 0",
@@ -801,10 +2151,6 @@ const styles = {
         fontWeight: "600",
     },
 
-    // Search
-    searchWrapper: {
-        marginBottom: "32px",
-    },
     searchInputWrapper: {
         position: "relative",
         maxWidth: "600px",
@@ -992,7 +2338,7 @@ const styles = {
         fontSize: "13px",
         fontWeight: "600",
         transition: "all 0.2s",
-        gridColumn: "span 2", // Make complete button wide
+        gridColumn: "2", // Make complete button wide
     },
     "btnSuccess:hover": {
         background: "#ecfdf5",
@@ -1010,7 +2356,7 @@ const styles = {
     emptyIcon: {
         fontSize: "48px",
         marginBottom: "16px",
-        opacity: 0.8,
+        opacity: "0.8",
     },
     emptyTitle: {
         margin: "0 0 8px 0",
@@ -1065,7 +2411,7 @@ const styles = {
         bottom: 0,
         background: "rgba(15, 23, 42, 0.6)",
         backdropFilter: "blur(4px)",
-        zIndex: 1000,
+        zIndex: 9999,
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
@@ -1207,6 +2553,7 @@ const styles = {
 
     // Log Table Styles
     logTable: {
+        marginTop: "16px",
         width: "100%",
         borderCollapse: "collapse",
         fontSize: "14px",
@@ -1303,4 +2650,4 @@ styleSheet.innerText = `
 `;
 document.head.appendChild(styleSheet);
 
-export default MaterialApprovedPage; 
+export default MaterialApprovedPage;

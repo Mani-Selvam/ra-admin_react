@@ -1,8 +1,10 @@
 import React, { useState, useEffect, useRef } from "react";
-import { createApproval } from "./approvalAPI";
-import { getTickets, updateTicket } from "./ticketAPI";
-import { getUsers } from "./userAPI";
-import { getTicketStatuses } from "../MasterDash/ticketStatusApi";
+import { createApproval } from "@/Components/Api/TicketApi/approvalAPI";
+import { getTickets, updateTicket } from "@/Components/Api/TicketApi/ticketAPI";
+import { getUsers } from "@/Components/Api/TicketApi/userAPI";
+import { getTicketStatuses } from "@/Components/Api/MasterApi/ticketStatusApi";
+import { updateWorkAnalysis } from "@/Components/Api/TicketApi/workAnalysisAPI";
+import API_ENDPOINTS from "@/config/apiConfig";
 import "./approvalForm.css";
 
 const ApprovalModule = ({
@@ -28,6 +30,19 @@ const ApprovalModule = ({
 
     // Build initial form data with prefill support
     const buildInitialFormData = () => {
+        // First, try to restore from localStorage if available
+        if (ticketId && !initialData) {
+            const key = `approval_form_${ticketId}`;
+            const saved = localStorage.getItem(key);
+            if (saved) {
+                try {
+                    return JSON.parse(saved);
+                } catch (e) {
+                    console.warn("Failed to restore draft from localStorage");
+                }
+            }
+        }
+
         const base = {
             ticket_id: ticketId || "",
             approver_id: approverId || loggedInUser?.id || "",
@@ -62,6 +77,13 @@ const ApprovalModule = ({
     const [dataLoading, setDataLoading] = useState(true);
     const [dropdownOpen, setDropdownOpen] = useState(false);
     const dropdownRef = useRef(null);
+
+    // Auto-save form data to localStorage whenever it changes
+    useEffect(() => {
+        if (!ticketId) return;
+        const key = `approval_form_${ticketId}`;
+        localStorage.setItem(key, JSON.stringify(formData));
+    }, [formData, ticketId]);
 
     // Fetch tickets and users on component mount
     useEffect(() => {
@@ -220,6 +242,46 @@ const ApprovalModule = ({
                 ticketUpdateData,
             );
             console.log("Ticket updated successfully:", ticketUpdateResponse);
+
+            // 3. If approval status is "Approved", also update related work analysis
+            // Set material_required to "No" so it appears in Material Approved page
+            if (String(formData.approval_status).toLowerCase() === "approved") {
+                try {
+                    console.log("Step 3: Updating work analysis for material approved...");
+                    // Find and update the work analysis for this ticket
+                    const ticketObj = tickets.find(t => String(t._id) === String(formData.ticket_id));
+                    if (ticketObj) {
+                        // We need to get the work analysis for this ticket
+                        // For now, we can try to update it by querying server, or pass it through props
+                        // The safest approach is to fetch work analyses and find the matching one
+                        try {
+                            const response = await fetch(API_ENDPOINTS.WORK_ANALYSIS, {
+                                headers: { Authorization: `Bearer ${localStorage.getItem("token")}` }
+                            });
+                            const allAnalyses = await response.json();
+                            
+                            // Find work analysis for this ticket
+                            const matchingAnalysis = allAnalyses.find(a => {
+                                const aTicketId = a.ticket_id?._id || a.ticket_id;
+                                return String(aTicketId) === String(formData.ticket_id);
+                            });
+                            
+                            if (matchingAnalysis) {
+                                await updateWorkAnalysis(matchingAnalysis._id, { 
+                                    material_required: "No",
+                                    approval_status: "Approved"
+                                });
+                                console.log("Work analysis updated - material_required set to 'No'");
+                            }
+                        } catch (err) {
+                            console.warn("Could not update work analysis:", err);
+                            // Don't fail the approval process if work analysis update fails
+                        }
+                    }
+                } catch (err) {
+                    console.warn("Failed to update work analysis:", err);
+                }
+            }
 
             setMessage({
                 text: "Approval recorded successfully and ticket updated!",

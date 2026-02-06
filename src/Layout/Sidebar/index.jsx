@@ -27,10 +27,7 @@ const Sidebar = ({sidebarOpen, setIsSidebarOpen}) => {
                     ))}
                 </ul>
             </Scrollbar>
-            <div className="menu-navs">
-                <span className="menu-previous"><i className="ti ti-chevron-left"/></span>
-                <span className="menu-next"><i className="ti ti-chevron-right"></i></span>
-            </div>
+            
         </nav>
     );
 };

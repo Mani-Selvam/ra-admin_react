@@ -1,6 +1,7 @@
 import axios from "axios";
+import API_ENDPOINTS from "../../../config/apiConfig";
 
-const API_URL = "http://localhost:5000/api/work-logs";
+const API_URL = `${API_ENDPOINTS.BASE_URL}/api/work-logs`;
 
 const getJSONHeader = () => {
     const token = localStorage.getItem("token");

@@ -1,7 +1,8 @@
 import axios from "axios";
+import API_ENDPOINTS from "@/config/apiConfig";
 
-// Make sure this matches your backend port (5000)
-const API_BASE_URL = "http://localhost:5000/api/companies";
+// API endpoint for companies (from centralized config)
+const API_BASE_URL = API_ENDPOINTS.COMPANIES;
 
 // 1. Get All Companies
 export const getCompanies = async () => {

@@ -64,7 +64,7 @@ const Layout = () => {
             <ScrollArrow/>
 
             {/*-- Footer Section starts--*/}
-            <Footer/>
+            {/* <Footer/> */}
             {/* <Customizer/> */}
             {/*-- Footer Section ends--*/}
         </div>

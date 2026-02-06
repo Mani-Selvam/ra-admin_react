@@ -1,8 +1,9 @@
 import React, { useEffect, useState } from "react";
-import { getTickets, updateTicket, deleteTicket } from "./ticketAPI";
-import { getWorkAnalysis } from "./workAnalysisAPI";
-import { getTicketStatuses } from "../MasterDash/ticketStatusApi";
+import { getTickets, updateTicket, deleteTicket } from "@/Components/Api/TicketApi/ticketAPI";
+import { getWorkAnalysis, updateWorkAnalysis } from "@/Components/Api/TicketApi/workAnalysisAPI";
+import { getTicketStatuses } from "@/Components/Api/MasterApi/ticketStatusApi";
 import { decryptTicketId } from "../../_helper/encryption";
+import API_ENDPOINTS from "@/config/apiConfig";
 import CreateTicket from "./CreateTicket";
 import ApprovalModule from "./ApprovalModule";
 import WorkAnalysisForm from "./WorkAnalysisForm";
@@ -269,14 +270,36 @@ const TicketList = () => {
         );
     };
 
-    const handleTicketCreated = () => {
-        setShowCreateForm(false);
-        setEditTicket(null);
-        fetchTickets();
-        showToast("Ticket created successfully!", "success");
+   const normalize = (text) =>
+  String(text).toLowerCase().replace(/\s+/g, " ").trim();
+
+const handleTicketCreated = (statusName = "Raised") => {
+
+    setShowCreateForm(false);
+    setEditTicket(null);
+    fetchTickets();
+
+    console.log("STATUS RECEIVED 👉", statusName);
+    const status = normalize(statusName);
+
+    const statusMessages = {
+        "closed": "🔒 Ticket closed successfully!",
+        "material approved": "✅ Material approved successfully!",
+        "material request": "📋 Material request created successfully!",
+        "working in progress": "⏳ Ticket marked as working in progress!",
+        "work completed": "✔️ Work completed successfully!",
+        "raised": "🚀 Ticket raised successfully!",
+        "approved": "✅ Ticket approved successfully!",
     };
 
-    // Toggle material approval for a ticket's analysis -> updates ticket status
+    const toastMessage =
+        statusMessages[status] ||
+        `🎫 Ticket created with ${statusName} successfully!`;
+
+    showToast(toastMessage, "success");
+};
+
+    // Toggle material approval for a ticket's analysis -> updates ticket status and work analysis
     const handleMaterialToggle = async (analysis, makePending) => {
         try {
             const ticketId = viewTicket?._id || (analysis.ticket_id && (analysis.ticket_id._id || analysis.ticket_id));
@@ -307,6 +330,14 @@ const TicketList = () => {
             console.log("Sending payload:", updatePayload);
             await updateTicket(ticketId, updatePayload);
 
+            // Update the work analysis material_required field
+            const analysisId = analysis._id || analysis.analysis_id;
+            if (analysisId) {
+                const materialValue = makePending ? "Yes" : "No";
+                await updateWorkAnalysis(analysisId, { material_required: materialValue });
+                console.log(`Work analysis ${analysisId} material_required updated to ${materialValue}`);
+            }
+
             showToast(`Ticket status updated to ${statusName}`, "success");
             
             // Update viewTicket immediately with new status
@@ -326,6 +357,81 @@ const TicketList = () => {
         } catch (err) {
             console.error("Failed to update ticket status:", err);
             showToast("Failed to update ticket status", "error");
+        }
+    };
+
+    // Close ticket - only available to the person who raised the ticket
+    const handleCloseTicket = async () => {
+        if (!viewTicket) {
+            showToast("No ticket selected", "error");
+            return;
+        }
+
+        // Get current user from localStorage
+        const currentUser = JSON.parse(localStorage.getItem("user") || "{}");
+        // Use 'id' or '_id' - localStorage uses 'id', but database uses '_id'
+        const currentUserId = currentUser.id || currentUser._id;
+        const raisedByUserId = viewTicket.raised_by?._id || viewTicket.raised_by;
+
+        console.log("🔍 Close Ticket Debug:");
+        console.log("   Current User ID:", currentUserId, "Type:", typeof currentUserId);
+        console.log("   Current User Object:", currentUser);
+        console.log("   Raised By ID:", raisedByUserId, "Type:", typeof raisedByUserId);
+        console.log("   Raised By Object:", viewTicket.raised_by);
+        console.log("   Match:", String(currentUserId) === String(raisedByUserId));
+
+        // Check if current user is the one who raised the ticket
+        if (String(currentUserId) !== String(raisedByUserId)) {
+            showToast("Only the person who raised this ticket can close it", "error");
+            return;
+        }
+
+        try {
+            // Find "Closed" status
+            let statusId = null;
+            let statusObj = null;
+            if (ticketStatuses && ticketStatuses.length > 0) {
+                statusObj = ticketStatuses.find((s) => String(s.name).toLowerCase() === "closed");
+                statusId = statusObj?._id || statusObj?.id || null;
+            }
+
+            const closedAtTimestamp = new Date().toISOString();
+            const updatePayload = {
+                ...(statusId ? { status_id: statusId } : { status: "Closed" }),
+                closed_at: closedAtTimestamp,
+            };
+
+            await updateTicket(viewTicket._id, updatePayload);
+            showToast("Ticket closed successfully", "success");
+
+            // Update viewTicket immediately
+            const updatedViewTicket = {
+                ...viewTicket,
+                status_id: statusObj ? { _id: statusObj._id, name: statusObj.name } : { name: "Closed" },
+                status: "Closed",
+                closed_at: closedAtTimestamp,
+            };
+            setViewTicket(updatedViewTicket);
+
+            // Also update in the tickets array immediately (for table view)
+            const updatedTickets = tickets.map((t) =>
+                String(t._id) === String(viewTicket._id)
+                    ? {
+                          ...t,
+                          status_id: statusObj ? { _id: statusObj._id, name: statusObj.name } : { name: "Closed" },
+                          status: "Closed",
+                          closed_at: closedAtTimestamp,
+                      }
+                    : t,
+            );
+            setTickets(updatedTickets);
+
+            // Re-fetch lists in background
+            fetchTickets();
+            fetchWorkAnalyses();
+        } catch (err) {
+            console.error("Failed to close ticket:", err);
+            showToast("Failed to close ticket: " + err.message, "error");
         }
     };
 
@@ -449,9 +555,9 @@ const TicketList = () => {
                                 onTicketCreated={handleTicketCreated}
                                 isEdit={!!editTicket}
                                 initialData={editTicket}
-                                onTicketUpdated={() => {
+                                onTicketUpdated={(statusName) => {
                                     setEditTicket(null);
-                                    handleTicketCreated();
+                                    handleTicketCreated(statusName);
                                 }}
                                 onClose={() => {
                                     setShowCreateForm(false);
@@ -475,11 +581,45 @@ const TicketList = () => {
                             <h3 style={styles.viewModalTitle}>
                                 Ticket Details
                             </h3>
-                            <button
-                                onClick={() => setViewTicket(null)}
-                                style={styles.iconBtn}>
-                                <CloseIcon />
-                            </button>
+                            <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                                {!viewTicket.closed_at && (() => {
+                                    const statusName = getStatusName(viewTicket);
+                                    const allowedStatusesForClosing = ["work completed", "resolved", "done", "closed"];
+                                    const canClose = allowedStatusesForClosing.some(s => String(statusName).toLowerCase().includes(s));
+                                    return canClose ? (
+                                        <button
+                                            onClick={handleCloseTicket}
+                                            title="Close this ticket (only available to the person who raised it)"
+                                            style={{
+                                                padding: "8px 12px",
+                                                borderRadius: 6,
+                                                border: "1px solid #ef4444",
+                                                background: "#fef2f2",
+                                                color: "#dc2626",
+                                                cursor: "pointer",
+                                                fontSize: 12,
+                                                fontWeight: 600,
+                                                whiteSpace: "nowrap",
+                                                transition: "all 0.2s"
+                                            }}
+                                            onMouseEnter={(e) => {
+                                                e.target.style.background = "#fee2e2";
+                                                e.target.style.color = "#991b1b";
+                                            }}
+                                            onMouseLeave={(e) => {
+                                                e.target.style.background = "#fef2f2";
+                                                e.target.style.color = "#dc2626";
+                                            }}>
+                                            🔒 Close Ticket
+                                        </button>
+                                    ) : null;
+                                })()}
+                                <button
+                                    onClick={() => setViewTicket(null)}
+                                    style={styles.iconBtn}>
+                                    <CloseIcon />
+                                </button>
+                            </div>
                         </div>
                         <div style={styles.viewModalBody}>
                             <div style={styles.ticketCard}>
@@ -502,15 +642,22 @@ const TicketList = () => {
                                             }}>
                                             {getPriorityName(viewTicket)}
                                         </span>
-                                        <span
-                                            style={{
-                                                ...styles.badge,
-                                                ...getStatusStyle(
-                                                    getStatusName(viewTicket),
-                                                ),
-                                            }}>
-                                            {getStatusName(viewTicket)}
-                                        </span>
+                                        <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                                            <span
+                                                style={{
+                                                    ...styles.badge,
+                                                    ...getStatusStyle(
+                                                        getStatusName(viewTicket),
+                                                    ),
+                                                }}>
+                                                {getStatusName(viewTicket)}
+                                            </span>
+                                            {viewTicket.closed_at && (
+                                                <span style={{ fontSize: "12px", color: "#666", fontWeight: 500 }}>
+                                                    📅 {new Date(viewTicket.closed_at).toLocaleDateString()}
+                                                </span>
+                                            )}
+                                        </div>
                                     </div>
                                 </div>
 
@@ -529,6 +676,14 @@ const TicketList = () => {
                                         </div>
                                         <div style={styles.infoItem}>
                                             <h5 style={styles.infoLabel}>
+                                                Location
+                                            </h5>
+                                            <p style={styles.infoValue}>
+                                                {viewTicket.location || "-"}
+                                            </p>
+                                        </div>
+                                        <div style={styles.infoItem}>
+                                            <h5 style={styles.infoLabel}>
                                                 Description
                                             </h5>
                                             <p style={styles.infoValue}>
@@ -540,7 +695,7 @@ const TicketList = () => {
                                                 <BuildingIcon /> Company
                                             </h5>
                                             <p style={styles.infoValue}>
-                                                {getCompanyName(viewTicket)}
+                                                {getCompanyName(viewTicket) }
                                             </p>
                                         </div>
                                         <div style={styles.infoItem}>
@@ -576,7 +731,7 @@ const TicketList = () => {
                                             <p style={styles.infoValue}>
                                                 {new Date(
                                                     viewTicket.createdAt,
-                                                ).toLocaleDateString()}
+                                                ).toLocaleString()}
                                             </p>
                                         </div>
                                         {viewTicket.closed_at && (
@@ -587,7 +742,7 @@ const TicketList = () => {
                                                 <p style={styles.infoValue}>
                                                     {new Date(
                                                         viewTicket.closed_at,
-                                                    ).toLocaleDateString()}
+                                                    ).toLocaleString()}
                                                 </p>
                                             </div>
                                         )}
@@ -601,7 +756,7 @@ const TicketList = () => {
                                         </h4>
                                         <div style={styles.imageContainer}>
                                             <img
-                                                src={`http://localhost:5000/${viewTicket.image}`}
+                                                src={`${API_ENDPOINTS.BASE_URL}/${viewTicket.image}`}
                                                 alt="ticket attachment"
                                                 style={styles.detailImage}
                                             />
@@ -829,7 +984,7 @@ const TicketList = () => {
                                                                                             "http",
                                                                                         )
                                                                                             ? normalized
-                                                                                            : `http://localhost:5000/${normalized}`;
+                                                                                            : `${API_ENDPOINTS.BASE_URL}/${normalized}`;
                                                                                     return (
                                                                                         <img
                                                                                             key={
@@ -957,7 +1112,7 @@ const TicketList = () => {
                                                             "http",
                                                         )
                                                             ? normalized
-                                                            : `http://localhost:5000/${normalized}`;
+                                                            : `${API_ENDPOINTS.BASE_URL}/${normalized}`;
                                                     return (
                                                         <div
                                                             key={i}
@@ -1094,7 +1249,7 @@ const TicketList = () => {
                                                                     "http",
                                                                 )
                                                                     ? normalized
-                                                                    : `http://localhost:5000/${normalized}`;
+                                                                    : `${API_ENDPOINTS.BASE_URL}/${normalized}`;
                                                             return (
                                                                 <img
                                                                     key={i}
@@ -1258,6 +1413,20 @@ const TicketList = () => {
                         Manage and track support tickets
                     </p>
                 </div>
+                <div style={styles.searchBarWrapper}>
+                    <div style={styles.searchInputWrapper}>
+                    <span style={styles.searchIcon}>
+                        <SearchIcon />
+                    </span>
+                    <input
+                        type="text"
+                        placeholder="Search"
+                        value={searchTerm}
+                        onChange={(e) => setSearchTerm(e.target.value)}
+                        style={styles.searchInput}
+                    />
+                    </div>
+                </div>
                 <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
                     <button
                         onClick={() => {
@@ -1271,20 +1440,7 @@ const TicketList = () => {
                 </div>
             </div>
 
-            <div style={styles.searchBarWrapper}>
-                <div style={styles.searchInputWrapper}>
-                    <span style={styles.searchIcon}>
-                        <SearchIcon />
-                    </span>
-                    <input
-                        type="text"
-                        placeholder="Search by ID, title or description..."
-                        value={searchTerm}
-                        onChange={(e) => setSearchTerm(e.target.value)}
-                        style={styles.searchInput}
-                    />
-                </div>
-            </div>
+            
 
             <div style={styles.cardContainer}>
                 {filteredTickets.length === 0 ? (
@@ -1320,6 +1476,7 @@ const TicketList = () => {
                                                 "Title",
                                                 "Description",
                                                 "Img",
+                                                "Location",
                                                 "Dept",
                                                 "Company",
                                                 "Raised By",
@@ -1348,9 +1505,9 @@ const TicketList = () => {
                                                     </span>
                                                 </td>
                                                 <td style={styles.td}>
-                                                    <strong>
+                                                    <span>
                                                         {ticket.title}
-                                                    </strong>
+                                                    </span>
                                                 </td>
                                                 <td style={styles.td}>
                                                     <span
@@ -1370,7 +1527,7 @@ const TicketList = () => {
                                                 <td style={styles.td}>
                                                     {ticket.image ? (
                                                         <img
-                                                            src={`http://localhost:5000/${ticket.image}`}
+                                                            src={`${API_ENDPOINTS.BASE_URL}/${ticket.image}`}
                                                             alt="img"
                                                             style={styles.thumb}
                                                             onClick={() =>
@@ -1387,6 +1544,27 @@ const TicketList = () => {
                                                             -
                                                         </span>
                                                     )}
+                                                </td>
+                                                <td style={styles.td}>
+                                                    <span
+                                                        title={
+                                                            ticket.location
+                                                        }
+                                                        style={{
+                                                            maxWidth:
+                                                                "120px",
+                                                            overflow:
+                                                                "hidden",
+                                                            textOverflow:
+                                                                "ellipsis",
+                                                            whiteSpace:
+                                                                "nowrap",
+                                                            display:
+                                                                "block",
+                                                        }}>
+                                                        {ticket.location ||
+                                                            "-"}
+                                                    </span>
                                                 </td>
                                                 <td style={styles.td}>
                                                     {ticket.department_id
@@ -1521,13 +1699,13 @@ const TicketList = () => {
                                                 <td style={styles.td}>
                                                     {new Date(
                                                         ticket.createdAt,
-                                                    ).toLocaleDateString()}
+                                                    ).toLocaleString()}
                                                 </td>
                                                 <td style={styles.td}>
-                                                    {ticket.closed_at
+                                                    {ticket.status_id?.name !== "Closed" && ticket.closed_at
                                                         ? new Date(
                                                               ticket.closed_at,
-                                                          ).toLocaleDateString()
+                                                          ).toLocaleString()
                                                         : "-"}
                                                 </td>
                                                 <td style={styles.td}>
@@ -1680,7 +1858,7 @@ const TicketList = () => {
                                         {ticket.image && (
                                             <div style={styles.cardImageBlock}>
                                                 <img
-                                                    src={`http://localhost:5000/${ticket.image}`}
+                                                    src={`${API_ENDPOINTS.BASE_URL}/${ticket.image}`}
                                                     alt="Attachment"
                                                     style={styles.cardImage}
                                                 />
@@ -1706,6 +1884,19 @@ const TicketList = () => {
                                                     <span style={styles.value}>
                                                         {ticket.department_id
                                                             ?.name || "-"}
+                                                    </span>
+                                                </div>
+                                            </div>
+
+                                            {/* Row 1.5: Location */}
+                                            <div style={styles.dataRow}>
+                                                <div style={styles.dataColFull}>
+                                                    <span style={styles.label}>
+                                                        📍 Location
+                                                    </span>
+                                                    <span style={styles.value}>
+                                                        {ticket.location ||
+                                                            "-"}
                                                     </span>
                                                 </div>
                                             </div>
@@ -1766,7 +1957,7 @@ const TicketList = () => {
                                                     <span style={styles.value}>
                                                         {new Date(
                                                             ticket.createdAt,
-                                                        ).toLocaleDateString()}
+                                                        ).toLocaleString()}
                                                     </span>
                                                 </div>
                                             </div>
@@ -1801,7 +1992,7 @@ const TicketList = () => {
                                                             }>
                                                             {new Date(
                                                                 ticket.closed_at,
-                                                            ).toLocaleDateString()}
+                                                            ).toLocaleString()}
                                                         </span>
                                                     </div>
                                                 </div>
@@ -1838,21 +2029,7 @@ const TicketList = () => {
                                                 }}>
                                                 Approve
                                             </button>
-                                            <button
-                                                onClick={() => {
-                                                    setSelectedTicketForAnalysis(
-                                                        ticket,
-                                                    );
-                                                    setShowWorkAnalysisModal(
-                                                        true,
-                                                    );
-                                                }}
-                                                style={{
-                                                    ...styles.actionBtn,
-                                                    ...styles.analysisBtnStyle,
-                                                }}>
-                                                Analysis
-                                            </button>
+                                        
                                             <button
                                                 onClick={() =>
                                                     handleDelete(ticket)
@@ -1913,17 +2090,15 @@ const styles = {
         minHeight: "100vh",
         padding: "20px",
         color: "#111827",
-        width: "145%",
-        transform: "scale(0.70)",
-        transformOrigin: "top left",
+       
     },
     headerSection: {
-        display: "flex",
-        justifyContent: "space-between",
-        alignItems: "center",
-        marginBottom: "24px",
-        flexWrap: "wrap",
-        gap: "16px",
+       display: "flex",
+    alignItems: "center",
+    flexWrap: "wrap",
+    gap: "16px",
+    justifyContent: "flex-start",
+    marginBottom: "24px",
     },
     mainTitle: {
         margin: 0,
@@ -1948,9 +2123,7 @@ const styles = {
         boxShadow: "0 4px 6px -1px rgba(79, 70, 229, 0.2)",
         transition: "all 0.2s",
     },
-    searchBarWrapper: {
-        marginBottom: "20px",
-    },
+
     searchInputWrapper: {
         position: "relative",
         maxWidth: "400px",
@@ -2124,7 +2297,7 @@ const styles = {
     actionBtn: {
         padding: "8px",
         borderRadius: "6px",
-        border: "1px solid #d1d5db",
+        border: "1px solid #bf3014",
         background: "white",
         color: "#4b5563",
         fontSize: "12px",
@@ -2133,15 +2306,11 @@ const styles = {
         transition: "all 0.2s",
     },
     approveBtnStyle: {
-        borderColor: "#a7f3d0",
+        borderColor: "#a1bc1d",
         color: "#059669",
         backgroundColor: "#ecfdf5",
     },
-    analysisBtnStyle: {
-        borderColor: "#bfdbfe",
-        color: "#2563eb",
-        backgroundColor: "#eff6ff",
-    },
+   
     deleteBtnStyle: {
         borderColor: "#fecaca",
         color: "#dc2626",
@@ -2160,11 +2329,11 @@ const styles = {
         textAlign: "left",
         padding: "16px",
         background: "#f9fafb",
-        color: "#6b7280",
+        color: "#000000",
         fontSize: "12px",
         textTransform: "uppercase",
         letterSpacing: "0.05em",
-        fontWeight: "600",
+        fontWeight: "700",
         borderBottom: "1px solid #e5e7eb",
     },
     tr: {

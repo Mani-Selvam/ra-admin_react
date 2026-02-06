@@ -26,6 +26,7 @@ import { ProtectedRoute } from "@/Components/Login/ProtectedRoute";
 import Login from "@/Components/Login/Login";
 
 // DashboardRoutes
+const EnhancedDashboard = React.lazy(() => import("@/Pages/Dashboard/EnhancedDashboard"));
 const Ecommerce = React.lazy(() => import("@/Pages/Dashboard/Ecommerce"));
 const ProjectPage = React.lazy(() => import("@/Pages/Dashboard/ProjectsPage"));
 const Crypto = React.lazy(() => import("@/Pages/Dashboard/Crypto"));
@@ -44,6 +45,8 @@ const TicketList = React.lazy(() => import("@/Pages/Ticket/TicketList"));
 const CreateTicket = React.lazy(() => import("@/Pages/Ticket/CreateTicket"));
 const Worker = React.lazy(() => import("@/Pages/Ticket/Worker"));
 const MaterialApprovedPage = React.lazy(() => import("@/Components/TicketDash/MaterialApprovedPage"));
+const ClosedTicket = React.lazy(() => import("@/Pages/Ticket/Closed"));
+const ShowTicket = React.lazy(() => import("@/Components/TicketDash/ShowTicket"));
 
 // // AppsRoutes
 const Calendar = React.lazy(() => import("@/Pages/Apps/Calendar"));
@@ -338,7 +341,7 @@ const Routes = () => {
                 { path: IndependentRoutes.WIDGETS_PAGE, element: <Widget /> },
 
                 // DashboardRoutes
-                { path: DashboardRoutes.MAIN_PAGE, element: <Navigate to={MasterRoutes.COMPANY_MASTER_PAGE} replace /> },
+                { path: DashboardRoutes.MAIN_PAGE, element: <EnhancedDashboard /> },
                 {
                     path: DashboardRoutes.ECOMMERCE_PAGE,
                     element: <Ecommerce />,
@@ -391,6 +394,14 @@ const Routes = () => {
                 {
                     path: TicketRoutes.MATERIAL_APPROVED_PAGE,
                     element: <MaterialApprovedPage />,
+                },
+                {
+                    path: TicketRoutes.CLOSED_PAGE,
+                    element: <ClosedTicket />,
+                },
+                {
+                    path: TicketRoutes.SHOW_TICKET_PAGE,
+                    element: <ShowTicket />,
                 },
 
                 //

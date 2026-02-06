@@ -43,13 +43,11 @@
 
 /* --- Main Layout --- */
 .wa-form-container {
-  width: 100vw;
-  max-width: 100vw;
+  width: 100%;
+  max-width: 800px; /* Standard form width */
   margin: 0 auto;
   font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
   color: var(--wa-text-main);
-  transform: scale(0.65);
-  transform-origin: top left;
 }
 
 .wa-form-card {

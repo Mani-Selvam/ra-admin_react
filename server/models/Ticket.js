@@ -79,6 +79,12 @@ const TicketSchema = new mongoose.Schema(
             type: Date,
             default: null,
         },
+        location: {
+            type: String,
+            required: false,
+            default: null,
+            trim: true,
+        },
     },
     {
         timestamps: true, // Automatically handles created_at and updated_at
@@ -96,24 +102,6 @@ TicketSchema.pre("save", async function () {
             "TKT-" +
             Date.now().toString().slice(-6) +
             Math.floor(Math.random() * 100);
-    }
-
-    // 2. Handle closed_at timestamp based on status
-    // If status_id is modified, populate it to get the status name
-    if (this.isModified("status_id") && this.status_id) {
-        try {
-            const mongoose = require("mongoose");
-            if (mongoose.Types.ObjectId.isValid(this.status_id)) {
-                await this.populate("status_id");
-                if (this.status_id?.name === "Closed") {
-                    this.closed_at = new Date();
-                } else {
-                    this.closed_at = null;
-                }
-            }
-        } catch (err) {
-            // If populate fails, just continue
-        }
     }
 
     // Don't call next() - just return from async function

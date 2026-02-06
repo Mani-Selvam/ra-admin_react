@@ -1,6 +1,7 @@
 import axios from "axios";
+import API_ENDPOINTS from "../../../config/apiConfig";
 
-const API_BASE_URL = "http://localhost:5000/api/departments";
+const API_BASE_URL = `${API_ENDPOINTS.BASE_URL}/api/departments`;
 
 export const getDepartments = async () => {
     const response = await axios.get(API_BASE_URL);

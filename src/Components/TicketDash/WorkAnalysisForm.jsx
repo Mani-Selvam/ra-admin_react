@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
-import { createWorkAnalysis, getWorkAnalysis } from "./workAnalysisAPI";
-import { getTickets, updateTicket } from "./ticketAPI";
-import { getTicketStatuses } from "../MasterDash/ticketStatusApi";
+import { createWorkAnalysis, getWorkAnalysis } from "@/Components/Api/TicketApi/workAnalysisAPI";
+import { getTickets, updateTicket } from "@/Components/Api/TicketApi/ticketAPI";
+import { getTicketStatuses } from "@/Components/Api/MasterApi/ticketStatusApi";
 import { useAuth } from "../Login/AuthContext";
 import "./workAnalysis.css";
 
@@ -12,6 +12,8 @@ const WorkAnalysisForm = ({
     workerId,
     onAnalysisCreated,
     initialData,
+    draftData,
+    onFormChange,
 }) => {
     // Get logged-in user from AuthContext
     const { user } = useAuth();
@@ -25,8 +27,17 @@ const WorkAnalysisForm = ({
         analysis_status: "Approved",
     };
 
-    // If parent provided previous submission data, use it to prefill
-    if (initialData) {
+    // If draft data provided (from localStorage), use it first (highest priority)
+    if (draftData) {
+        initialFormData.ticket_id = draftData.ticket_id || initialFormData.ticket_id;
+        initialFormData.worker_id = draftData.worker_id || initialFormData.worker_id;
+        initialFormData.worker_name = draftData.worker_name || initialFormData.worker_name;
+        initialFormData.material_required = draftData.material_required || initialFormData.material_required;
+        initialFormData.material_description = draftData.material_description || initialFormData.material_description;
+        initialFormData.analysis_status = draftData.analysis_status || initialFormData.analysis_status;
+    }
+    // Else if parent provided previous submission data, use it to prefill
+    else if (initialData) {
         initialFormData.ticket_id = initialData.ticket_id?._id || initialData.ticket_id || initialFormData.ticket_id;
         initialFormData.worker_id = initialData.worker_id || initialFormData.worker_id;
         initialFormData.worker_name = initialData.worker_name || initialFormData.worker_name || "";
@@ -147,6 +158,13 @@ const WorkAnalysisForm = ({
             else setSelectedTicket({ _id: initialData.ticket_id._id || initialData.ticket_id, ticket_id: initialData.ticket_id.ticket_id || "", title: initialData.ticket_id.title || "" });
         }
     }, [initialData]);
+
+    // Auto-save form changes to parent (for localStorage persistence)
+    useEffect(() => {
+        if (onFormChange) {
+            onFormChange(formData);
+        }
+    }, [formData, onFormChange]);
 
     const handleTicketChange = (e) => {
         const ticketIdValue = e.target.value;

@@ -4,7 +4,7 @@ import {
     createDesignation,
     updateDesignation,
     deleteDesignation,
-} from "./designationApi";
+} from "@/Components/Api/MasterApi/designationApi";
 
 // --- ICONS ---
 const PlusIcon = () => (
@@ -433,7 +433,7 @@ const DesignationMaster = () => {
                                     filteredDesignations.map((d) => (
                                         <tr key={d._id} style={styles.tr}>
                                             <td style={styles.td}>
-                                                <strong>{d.name}</strong>
+                                                <span>{d.name}</span>
                                             </td>
                                             <td style={styles.td}>
                                                 <span
@@ -458,7 +458,7 @@ const DesignationMaster = () => {
                                             </td>
                                             <td style={styles.tdAction}>
                                                 <button
-                                                    style={styles.actionBtn}
+                                                    style={styles.actionBtnView}
                                                     onClick={() =>
                                                         handleView(d)
                                                     }>
@@ -644,28 +644,29 @@ const styles = {
         textAlign: "left",
         padding: "12px 16px",
         backgroundColor: "#f9fafb",
-        color: "#6b7280",
+        color: "#000000",
         fontSize: "12px",
         textTransform: "uppercase",
         letterSpacing: "0.05em",
-        fontWeight: "600",
+        fontWeight: "700",
     },
     thAction: {
         textAlign: "right",
         paddingRight: "50px",
         backgroundColor: "#f9fafb",
-        color: "#6b7280",
+        color: "#000000",
         fontSize: "12px",
         textTransform: "uppercase",
         letterSpacing: "0.05em",
-        fontWeight: "600",
+        fontWeight: "700",
     },
     tr: { borderBottom: "1px solid #f3f4f6" },
     td: {
         padding: "12px 16px",
-        color: "#374151",
+        color: "#676767",
         fontSize: "14px",
         verticalAlign: "middle",
+       
     },
     tdAction: {
         textAlign: "right",
@@ -673,8 +674,8 @@ const styles = {
         paddingRight: "24px",
     },
     actionBtn: {
-        background: "#e0e7ff",
-        color: "#3730a3",
+        background: "#d017d6",
+        color: "#e4e4e4",
         border: "none",
         borderRadius: "6px",
         width: "32px",
@@ -684,10 +685,23 @@ const styles = {
         alignItems: "center",
         cursor: "pointer",
         marginRight: "4px",
+        margin:"5px",
     },
     actionBtnDelete: {
-        background: "#fee2e2",
-        color: "#991b1b",
+        background: "#ef1414",
+        color: "#ffffff",
+        border: "none",
+        borderRadius: "6px",
+        width: "32px",
+        height: "32px",
+        display: "inline-flex",
+        justifyContent: "center",
+        alignItems: "center",
+        cursor: "pointer",
+    },
+    actionBtnView: {
+        background: "#7379c9",
+        color: "#ffffff",
         border: "none",
         borderRadius: "6px",
         width: "32px",

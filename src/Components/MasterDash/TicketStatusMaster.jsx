@@ -4,7 +4,7 @@ import {
     createTicketStatus,
     updateTicketStatus,
     deleteTicketStatus,
-} from "./ticketStatusApi";
+} from "@/Components/Api/MasterApi/ticketStatusApi";
 
 // --- ICONS ---
 const PlusIcon = () => (
@@ -158,6 +158,26 @@ const TicketStatusMaster = () => {
         setLoading(true);
 
         try {
+            // Check if name is empty
+            if (!form.name.trim()) {
+                alert("Ticket Status name is required");
+                setLoading(false);
+                return;
+            }
+
+            // Check for duplicate name (only if creating new, not editing)
+            if (!isEdit) {
+                const isDuplicate = ticketStatuses.some(
+                    (status) => String(status.name).toLowerCase().trim() === String(form.name).toLowerCase().trim()
+                );
+                
+                if (isDuplicate) {
+                    alert(`Ticket Status "${form.name}" already exists! Please use a different name.`);
+                    setLoading(false);
+                    return;
+                }
+            }
+
             if (isEdit) {
                 await updateTicketStatus(form.id, form);
             } else {
@@ -439,14 +459,14 @@ const TicketStatusMaster = () => {
                                     filteredTicketStatuses.map((t) => (
                                         <tr key={t._id} style={styles.tr}>
                                             <td style={styles.tdLeft}>
-                                                <strong>{t.name}</strong>
+                                                <span>{t.name}</span>
                                             </td>
                                             <td style={styles.tdCenter}>
                                                 <span
                                                     style={{
                                                         ...styles.sortBadge,
                                                         backgroundColor:
-                                                            "#6366f1",
+                                                            "",
                                                         color: "#f8fafb",
                                                     }}>
                                                     #{t.sortOrder}
@@ -459,7 +479,7 @@ const TicketStatusMaster = () => {
                                                         styles.actionButtonGroup
                                                     }>
                                                     <button
-                                                        style={styles.actionBtn}
+                                                        style={styles.actionBtnView}
                                                         onClick={() =>
                                                             handleView(t)
                                                         }
@@ -692,34 +712,42 @@ const styles = {
         fontWeight: "700",
         display: "inline-block",
     },
-
-    actionBtn: {
-        background: "#e0e7ff",
-        color: "#3730a3",
+ actionBtn: {
+        background: "#d017d6",
+        color: "#e4e4e4",
         border: "none",
-        borderRadius: "50%",
-        width: "36px",
-        height: "36px",
+        borderRadius: "6px",
+        width: "32px",
+        height: "32px",
         display: "inline-flex",
         justifyContent: "center",
         alignItems: "center",
         cursor: "pointer",
-        boxShadow: "0 2px 4px rgba(0,0,0,0.1)",
-        transition: "transform 0.1s ease, box-shadow 0.1s ease",
+        marginRight: "4px",
     },
     actionBtnDelete: {
-        background: "#fee2e2",
-        color: "#991b1b",
+        background: "#ef1414",
+        color: "#ffffff",
         border: "none",
-        borderRadius: "50%",
-        width: "36px",
-        height: "36px",
+        borderRadius: "6px",
+        width: "32px",
+        height: "32px",
         display: "inline-flex",
         justifyContent: "center",
         alignItems: "center",
         cursor: "pointer",
-        boxShadow: "0 2px 4px rgba(0,0,0,0.1)",
-        transition: "transform 0.1s ease, box-shadow 0.1s ease",
+    },
+    actionBtnView: {
+        background: "#7379c9",
+        color: "#ffffff",
+        border: "none",
+        borderRadius: "6px",
+        width: "32px",
+        height: "32px",
+        display: "inline-flex",
+        justifyContent: "center",
+        alignItems: "center",
+        cursor: "pointer",
     },
     noData: {
         textAlign: "center",

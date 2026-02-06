@@ -31,32 +31,32 @@ app.use(express.json());
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 
 // Initialize ticket statuses on server startup
-const initializeTicketStatuses = async () => {
-    try {
-        const requiredStatuses = [
-            { name: "Material Request", sortOrder: 99 },
-            { name: "Material Approved", sortOrder: 100 },
-            { name: "Working In Progress", sortOrder: 101 }
-        ];
+// const initializeTicketStatuses = async () => {
+//     try {
+//         const requiredStatuses = [
+//             { name: "Material Request", sortOrder: 99 },
+//             { name: "Material Approved", sortOrder: 100 },
+//             { name: "Work In Progress", sortOrder: 101 }
+//         ];
 
-        for (const status of requiredStatuses) {
-            const existing = await TicketStatus.findOne({ name: status.name });
-            if (!existing) {
-                await TicketStatus.create({
-                    name: status.name,
-                    sortOrder: status.sortOrder,
-                    status: "Active"
-                });
-                console.log(`✅ Created TicketStatus: ${status.name}`);
-            }
-        }
-    } catch (error) {
-        console.error("❌ Error initializing ticket statuses:", error.message);
-    }
-};
+//         for (const status of requiredStatuses) {
+//             const existing = await TicketStatus.findOne({ name: status.name });
+//             if (!existing) {
+//                 await TicketStatus.create({
+//                     name: status.name,
+//                     sortOrder: status.sortOrder,
+//                     status: "Active"
+//                 });
+//                 console.log(`✅ Created TicketStatus: ${status.name}`);
+//             }
+//         }
+//     } catch (error) {
+//         console.error("❌ Error initializing ticket statuses:", error.message);
+//     }
+// };
 
 // Call initialization after connecting to DB
-setTimeout(initializeTicketStatuses, 1000);
+// setTimeout(initializeTicketStatuses, 1000);
 
 // Routes
 app.use("/api/companies", companyRoutes);

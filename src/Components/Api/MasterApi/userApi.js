@@ -1,6 +1,7 @@
 import axios from "axios";
+import API_ENDPOINTS from "../../../config/apiConfig";
 
-const API_BASE_URL = "http://localhost:5000/api/users";
+const API_BASE_URL = `${API_ENDPOINTS.BASE_URL}/api/users`;
 
 // 1. Dropdown Data (For Forms)
 export const getDropdowns = async () => {

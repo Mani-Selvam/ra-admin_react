@@ -660,7 +660,7 @@ body[text=large-text] {
     left: 0;
     z-index: 1002;
     width: 100vw;
-    height: 100vh;
+    height: auto;
     background-color: rgba(var(--dark), 0.5);
     transition: var(--app-transition);
   }
@@ -1137,7 +1137,7 @@ body[text=large-text] {
     left: 0;
     z-index: 1002;
     width: 100vw;
-    height: 100vh;
+    height: auto;
     background-color: rgba(var(--dark), 0.5);
     transition: var(--app-transition);
   }

@@ -1,6 +1,7 @@
 import axios from "axios";
+import API_ENDPOINTS from "../../../config/apiConfig";
 
-const API_URL = "http://localhost:5000/api/tickets"; // Adjust port if needed
+const API_URL = `${API_ENDPOINTS.BASE_URL}/api/tickets`; // Adjust port if needed
 
 // Helper to get token from localStorage for FormData
 const getFormDataHeader = () => {

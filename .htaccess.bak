@@ -1,0 +1,13 @@
+# Backup of .htaccess for reference
+# If you need to revert, rename this file to .htaccess
+
+<IfModule mod_rewrite.c>
+  RewriteEngine On
+  RewriteBase /neoticketsystem/
+
+  RewriteCond %{REQUEST_FILENAME} -f [OR]
+  RewriteCond %{REQUEST_FILENAME} -d
+  RewriteRule ^ - [L]
+
+  RewriteRule . /neoticketsystem/index.html [L]
+</IfModule>
